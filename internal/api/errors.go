@@ -16,6 +16,9 @@ const (
 	KindUsage          = "usage"
 	KindPartialFailure = "partial_failure"
 	KindConflict       = "conflict"
+	// KindOutputFailed: the call succeeded, but its response could not be
+	// written where it was asked to go. The change, if any, has happened.
+	KindOutputFailed = "output_failed"
 )
 
 // Error is the single error type the CLI reports, shaped for JSON output.

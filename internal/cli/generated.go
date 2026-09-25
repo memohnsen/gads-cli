@@ -166,14 +166,19 @@ func (a *app) runMethod(cmd *cobra.Command, meth *manifest.Method, args []string
 		return err
 	}
 	a.applyGlobalFlags(cmd)
+	out, err := openOutput(flagString(cmd, "output"))
+	if err != nil {
+		return err
+	}
+	defer out.discard()
 	if flagBool(cmd, "all") {
-		return a.runAll(cmd, meth, *req)
+		return a.runAll(cmd, meth, *req, out)
 	}
 	resp, err := a.client.Do(cmd.Context(), *req)
 	if err != nil {
 		return err
 	}
-	if err := a.writeResponse(resp, flagString(cmd, "output")); err != nil {
+	if err := a.writeResponse(resp, out); err != nil {
 		return err
 	}
 	if partial {

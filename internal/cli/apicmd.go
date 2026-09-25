@@ -90,13 +90,18 @@ func (a *app) apiCommand() *cobra.Command {
 				return err
 			}
 			a.applyGlobalFlags(cmd)
+			out, err := openOutput(flagString(cmd, "output"))
+			if err != nil {
+				return err
+			}
+			defer out.discard()
 			resp, err := a.client.Do(cmd.Context(), api.Request{
 				Method: method, Path: path, Query: q, Body: body, Risk: risk, MethodID: target.ID, Headers: hdr,
 			})
 			if err != nil {
 				return err
 			}
-			return a.writeResponse(resp, flagString(cmd, "output"))
+			return a.writeResponse(resp, out)
 		},
 	}
 	cmd.Flags().String("data", "", "JSON body: literal, @file, or - for stdin")

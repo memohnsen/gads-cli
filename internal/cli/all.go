@@ -15,7 +15,7 @@ import (
 // It is the only place the CLI reshapes a response, so each row reaches the
 // output exactly as Google sent it. Hitting --max-pages is not silent
 // success: the partial array is written and the run ends as incomplete.
-func (a *app) runAll(cmd *cobra.Command, meth *manifest.Method, base api.Request) error {
+func (a *app) runAll(cmd *cobra.Command, meth *manifest.Method, base api.Request, out *outputFile) error {
 	maxPages, _ := cmd.Flags().GetInt("max-pages")
 	var body map[string]any
 	if meth.Paging == manifest.PagingBodyToken {
@@ -92,7 +92,7 @@ func (a *app) runAll(cmd *cobra.Command, meth *manifest.Method, base api.Request
 		buf.Write(r)
 	}
 	buf.WriteString("]\n")
-	if err := a.writeResponse(&api.Response{Body: buf.Bytes()}, flagString(cmd, "output")); err != nil {
+	if err := a.writeResponse(&api.Response{Body: buf.Bytes()}, out); err != nil {
 		return err
 	}
 	if !complete {
