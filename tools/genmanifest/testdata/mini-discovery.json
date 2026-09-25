@@ -1,0 +1,43 @@
+{
+  "kind": "discovery#restDescription", "version": "v25", "revision": "20260101",
+  "resources": {
+    "customers": {
+      "methods": {
+        "listAccessibleCustomers": {"id": "googleads.customers.listAccessibleCustomers", "path": "v25/customers:listAccessibleCustomers", "httpMethod": "GET", "response": {"$ref": "ListResp"}},
+        "mutate": {"id": "googleads.customers.mutate", "path": "v25/customers/{+customerId}:mutate", "httpMethod": "POST",
+          "parameters": {"customerId": {"type": "string", "location": "path", "required": true, "pattern": "^[^/]+$"}},
+          "request": {"$ref": "MutateCustomerRequest"}, "response": {"$ref": "Empty"}}
+      },
+      "resources": {
+        "googleAds": {"methods": {
+          "mutate": {"id": "googleads.customers.googleAds.mutate", "path": "v25/customers/{+customerId}/googleAds:mutate", "httpMethod": "POST",
+            "parameters": {"customerId": {"type": "string", "location": "path", "required": true, "pattern": "^[^/]+$"}},
+            "request": {"$ref": "MutateGoogleAdsRequest"}, "response": {"$ref": "Empty"}},
+          "search": {"id": "googleads.customers.googleAds.search", "path": "v25/customers/{+customerId}/googleAds:search", "httpMethod": "POST",
+            "parameters": {"customerId": {"type": "string", "location": "path", "required": true, "pattern": "^[^/]+$"}},
+            "request": {"$ref": "SearchRequest"}, "response": {"$ref": "SearchResponse"}}
+        }},
+        "campaigns": {"methods": {
+          "mutate": {"id": "googleads.customers.campaigns.mutate", "path": "v25/customers/{+customerId}/campaigns:mutate", "httpMethod": "POST",
+            "parameters": {"customerId": {"type": "string", "location": "path", "required": true, "pattern": "^[^/]+$"}},
+            "request": {"$ref": "MutateCampaignsRequest"}, "response": {"$ref": "Empty"}}
+        }}
+      }
+    }
+  },
+  "schemas": {
+    "Empty": {"id": "Empty", "type": "object", "properties": {}},
+    "ListResp": {"id": "ListResp", "type": "object", "properties": {"resourceNames": {"type": "array", "items": {"type": "string"}}}},
+    "Campaign": {"id": "Campaign", "type": "object", "properties": {"name": {"type": "string"}, "status": {"type": "string", "enum": ["UNSPECIFIED", "UNKNOWN", "ENABLED", "PAUSED", "REMOVED"]}}},
+    "Customer": {"id": "Customer", "type": "object", "properties": {"id": {"type": "string", "format": "int64", "readOnly": true}}},
+    "CampaignOperation": {"id": "CampaignOperation", "type": "object", "properties": {"create": {"$ref": "Campaign"}, "update": {"$ref": "Campaign"}, "remove": {"type": "string"}, "updateMask": {"type": "string"}}},
+    "CustomerOperation": {"id": "CustomerOperation", "type": "object", "properties": {"update": {"$ref": "Customer"}, "updateMask": {"type": "string"}}},
+    "MutateCampaignsRequest": {"id": "MutateCampaignsRequest", "type": "object", "properties": {"operations": {"type": "array", "items": {"$ref": "CampaignOperation"}}, "validateOnly": {"type": "boolean"}, "partialFailure": {"type": "boolean"}}},
+    "MutateCustomerRequest": {"id": "MutateCustomerRequest", "type": "object", "properties": {"operation": {"$ref": "CustomerOperation"}, "validateOnly": {"type": "boolean"}}},
+    "MutateOperation": {"id": "MutateOperation", "type": "object", "properties": {"campaignOperation": {"$ref": "CampaignOperation"}}},
+    "MutateGoogleAdsRequest": {"id": "MutateGoogleAdsRequest", "type": "object", "properties": {"mutateOperations": {"type": "array", "items": {"$ref": "MutateOperation"}}, "validateOnly": {"type": "boolean"}, "partialFailure": {"type": "boolean"}}},
+    "SearchRequest": {"id": "SearchRequest", "type": "object", "properties": {"query": {"type": "string"}, "pageToken": {"type": "string"}, "validateOnly": {"type": "boolean"}}},
+    "SearchResponse": {"id": "SearchResponse", "type": "object", "properties": {"results": {"type": "array", "items": {"$ref": "Row"}}, "nextPageToken": {"type": "string"}}},
+    "Row": {"id": "Row", "type": "object", "properties": {"campaign": {"$ref": "Campaign"}}}
+  }
+}

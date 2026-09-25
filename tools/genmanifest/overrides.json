@@ -1,0 +1,28 @@
+{
+  "commands": {
+    "customers.googleAds.search": "search",
+    "customers.googleAds.searchStream": "search-stream",
+    "customers.googleAds.mutate": "mutate",
+    "customers.mutate": "customer mutate",
+    "customers.campaigns.enablePMaxBrandGuidelines": "campaigns enable-pmax-brand-guidelines",
+    "customers.smartCampaignSettings.generatePMaxDraftCampaign": "smart-campaign-settings generate-pmax-draft-campaign",
+    "customers.youTubeVideoUploads.remove": "youtube-video-uploads remove",
+    "customers.youTubeVideoUploads.update": "youtube-video-uploads update"
+  },
+  "skiplist": {
+    "media.upload": "YouTube video upload uses Google's media upload protocol, which this client does not implement"
+  },
+  "blocked": {
+    "customers.recommendations.apply": "applying a recommendation can set a budget to an amount Google chooses, which the budget cap cannot check; read recommendations with search and carry out a worthwhile one through mutate",
+    "customers.recommendationSubscriptions.mutateRecommendationSubscription": "an auto-apply subscription lets Google change budgets later, outside any check",
+    "customers.reservations.bookCampaigns": "booking a reservation commits spend that the budget cap cannot check"
+  },
+  "generic_operations": {
+    "bookCampaignsOperation": "customers.reservations.bookCampaigns",
+    "quoteCampaignsOperation": "customers.reservations.quoteCampaigns",
+    "recommendationSubscriptionOperation": "customers.recommendationSubscriptions.mutateRecommendationSubscription"
+  },
+  "results_fields": {
+    "customers.operations.list": "operations"
+  }
+}

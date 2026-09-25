@@ -1,0 +1,174 @@
+account-budget-proposals mutate	customers.accountBudgetProposals.mutate	admin
+account-links create	customers.accountLinks.create	admin
+account-links mutate	customers.accountLinks.mutate	admin
+ad-group-ad-labels mutate	customers.adGroupAdLabels.mutate	write
+ad-group-ads mutate	customers.adGroupAds.mutate	write
+ad-group-ads remove-automatically-created-assets	customers.adGroupAds.removeAutomaticallyCreatedAssets	delete
+ad-group-asset-sets mutate	customers.adGroupAssetSets.mutate	write
+ad-group-assets mutate	customers.adGroupAssets.mutate	write
+ad-group-bid-modifiers mutate	customers.adGroupBidModifiers.mutate	write
+ad-group-criteria mutate	customers.adGroupCriteria.mutate	write
+ad-group-criterion-customizers mutate	customers.AdGroupCriterionCustomizers.mutate	write
+ad-group-criterion-labels mutate	customers.adGroupCriterionLabels.mutate	write
+ad-group-customizers mutate	customers.adGroupCustomizers.mutate	write
+ad-group-labels mutate	customers.adGroupLabels.mutate	write
+ad-groups mutate	customers.adGroups.mutate	write
+ad-parameters mutate	customers.adParameters.mutate	write
+ads mutate	customers.ads.mutate	write
+asset-generations generate-images	customers.assetGenerations.generateImages	read
+asset-generations generate-text	customers.assetGenerations.generateText	read
+asset-group-assets mutate	customers.assetGroupAssets.mutate	write
+asset-group-listing-group-filters mutate	customers.assetGroupListingGroupFilters.mutate	write
+asset-group-signals mutate	customers.assetGroupSignals.mutate	write
+asset-groups mutate	customers.assetGroups.mutate	write
+asset-set-assets mutate	customers.assetSetAssets.mutate	write
+asset-sets mutate	customers.assetSets.mutate	write
+assets mutate	customers.assets.mutate	write
+audience-insights list-insights-eligible-dates	audienceInsights.listInsightsEligibleDates	read
+audiences mutate	customers.audiences.mutate	write
+batch-jobs add-operations	customers.batchJobs.addOperations	admin
+batch-jobs list-results	customers.batchJobs.listResults	read
+batch-jobs mutate	customers.batchJobs.mutate	admin
+batch-jobs run	customers.batchJobs.run	admin
+bidding-data-exclusions mutate	customers.biddingDataExclusions.mutate	write
+bidding-seasonality-adjustments mutate	customers.biddingSeasonalityAdjustments.mutate	write
+bidding-strategies mutate	customers.biddingStrategies.mutate	write
+billing-setups mutate	customers.billingSetups.mutate	admin
+campaign-asset-sets mutate	customers.campaignAssetSets.mutate	write
+campaign-assets mutate	customers.campaignAssets.mutate	write
+campaign-bid-modifiers mutate	customers.campaignBidModifiers.mutate	write
+campaign-budgets mutate	customers.campaignBudgets.mutate	write
+campaign-conversion-goals mutate	customers.campaignConversionGoals.mutate	write
+campaign-criteria mutate	customers.campaignCriteria.mutate	write
+campaign-customizers mutate	customers.campaignCustomizers.mutate	write
+campaign-drafts list-async-errors	customers.campaignDrafts.listAsyncErrors	read
+campaign-drafts mutate	customers.campaignDrafts.mutate	write
+campaign-drafts promote	customers.campaignDrafts.promote	spend
+campaign-goal-configs mutate	customers.CampaignGoalConfigs.mutate	write
+campaign-groups mutate	customers.campaignGroups.mutate	write
+campaign-labels mutate	customers.campaignLabels.mutate	write
+campaign-shared-sets mutate	customers.campaignSharedSets.mutate	write
+campaigns enable-pmax-brand-guidelines	customers.campaigns.enablePMaxBrandGuidelines	write
+campaigns mutate	customers.campaigns.mutate	write
+conversion-actions mutate	customers.conversionActions.mutate	write
+conversion-custom-variables mutate	customers.conversionCustomVariables.mutate	write
+conversion-goal-campaign-configs mutate	customers.conversionGoalCampaignConfigs.mutate	write
+conversion-value-rule-sets mutate	customers.conversionValueRuleSets.mutate	write
+conversion-value-rules mutate	customers.conversionValueRules.mutate	write
+create-customer-client	customers.createCustomerClient	admin
+custom-audiences mutate	customers.customAudiences.mutate	write
+custom-conversion-goals mutate	customers.customConversionGoals.mutate	write
+custom-interests mutate	customers.customInterests.mutate	write
+customer mutate	customers.mutate	write
+customer-asset-sets mutate	customers.customerAssetSets.mutate	write
+customer-assets mutate	customers.customerAssets.mutate	write
+customer-client-links mutate	customers.customerClientLinks.mutate	admin
+customer-conversion-goals mutate	customers.customerConversionGoals.mutate	write
+customer-customizers mutate	customers.CustomerCustomizers.mutate	write
+customer-labels mutate	customers.customerLabels.mutate	write
+customer-manager-links move-manager-link	customers.customerManagerLinks.moveManagerLink	admin
+customer-manager-links mutate	customers.customerManagerLinks.mutate	admin
+customer-negative-criteria mutate	customers.customerNegativeCriteria.mutate	write
+customer-sk-ad-network-conversion-value-schemas mutate	customers.customerSkAdNetworkConversionValueSchemas.mutate	write
+customer-user-access-invitations mutate	customers.customerUserAccessInvitations.mutate	admin
+customer-user-accesses mutate	customers.customerUserAccesses.mutate	admin
+customizer-attributes mutate	customers.customizerAttributes.mutate	write
+data-links create	customers.dataLinks.create	admin
+data-links remove	customers.dataLinks.remove	admin
+data-links update	customers.dataLinks.update	admin
+experiment-arms mutate	customers.experimentArms.mutate	write
+experiments end-experiment	customers.experiments.endExperiment	write
+experiments graduate-experiment	customers.experiments.graduateExperiment	spend
+experiments list-experiment-async-errors	customers.experiments.listExperimentAsyncErrors	read
+experiments mutate	customers.experiments.mutate	write
+experiments promote-experiment	customers.experiments.promoteExperiment	spend
+experiments schedule-experiment	customers.experiments.scheduleExperiment	spend
+generate-ad-group-themes	customers.generateAdGroupThemes	read
+generate-audience-composition-insights	customers.generateAudienceCompositionInsights	read
+generate-audience-definition	customers.generateAudienceDefinition	read
+generate-audience-overlap-insights	customers.generateAudienceOverlapInsights	read
+generate-benchmarks-metrics	customers.generateBenchmarksMetrics	read
+generate-conversion-rates	generateConversionRates	read
+generate-creator-insights	customers.generateCreatorInsights	read
+generate-insights-finder-report	customers.generateInsightsFinderReport	read
+generate-keyword-forecast-metrics	customers.generateKeywordForecastMetrics	read
+generate-keyword-historical-metrics	customers.generateKeywordHistoricalMetrics	read
+generate-keyword-ideas	customers.generateKeywordIdeas	read
+generate-reach-forecast	customers.generateReachForecast	read
+generate-shareable-previews	customers.generateShareablePreviews	read
+generate-suggested-targeting-insights	customers.generateSuggestedTargetingInsights	read
+generate-targeting-suggestion-metrics	customers.generateTargetingSuggestionMetrics	read
+generate-trending-insights	customers.generateTrendingInsights	read
+geo-target-constants suggest	geoTargetConstants.suggest	read
+get-identity-verification	customers.getIdentityVerification	read
+goals mutate	customers.Goals.mutate	write
+google-ads-fields get	googleAdsFields.get	read
+google-ads-fields search	googleAdsFields.search	read
+incentives apply-incentive	customers.incentives.applyIncentive	admin
+incentives fetch-incentive	incentives.fetchIncentive	read
+invoices list	customers.invoices.list	read
+keyword-plan-ad-group-keywords mutate	customers.keywordPlanAdGroupKeywords.mutate	write
+keyword-plan-ad-groups mutate	customers.keywordPlanAdGroups.mutate	write
+keyword-plan-campaign-keywords mutate	customers.keywordPlanCampaignKeywords.mutate	write
+keyword-plan-campaigns mutate	customers.keywordPlanCampaigns.mutate	write
+keyword-plans mutate	customers.keywordPlans.mutate	write
+keyword-theme-constants suggest	keywordThemeConstants.suggest	read
+labels mutate	customers.labels.mutate	write
+list-accessible-customers	customers.listAccessibleCustomers	read
+list-benchmarks-available-dates	listBenchmarksAvailableDates	read
+list-benchmarks-locations	listBenchmarksLocations	read
+list-benchmarks-products	listBenchmarksProducts	read
+list-benchmarks-sources	listBenchmarksSources	read
+list-plannable-locations	listPlannableLocations	read
+list-plannable-products	listPlannableProducts	read
+list-plannable-user-interests	listPlannableUserInterests	read
+list-plannable-user-lists	listPlannableUserLists	read
+local-services append-lead-conversation	customers.localServices.appendLeadConversation	admin
+local-services-leads provide-lead-feedback	customers.localServicesLeads.provideLeadFeedback	admin
+multi-party-auth-review resolve	customers.multiPartyAuthReview.resolve	admin
+mutate	customers.googleAds.mutate	write
+offline-user-data-jobs add-operations	customers.offlineUserDataJobs.addOperations	admin
+offline-user-data-jobs create	customers.offlineUserDataJobs.create	admin
+offline-user-data-jobs run	customers.offlineUserDataJobs.run	admin
+operations cancel	customers.operations.cancel	write
+operations delete	customers.operations.delete	delete
+operations get	customers.operations.get	read
+operations list	customers.operations.list	read
+operations wait	customers.operations.wait	read
+payments-accounts list	customers.paymentsAccounts.list	read
+product-link-invitations create	customers.productLinkInvitations.create	admin
+product-link-invitations remove	customers.productLinkInvitations.remove	admin
+product-link-invitations update	customers.productLinkInvitations.update	admin
+product-links create	customers.productLinks.create	admin
+product-links remove	customers.productLinks.remove	admin
+recommendation-subscriptions mutate-recommendation-subscription	customers.recommendationSubscriptions.mutateRecommendationSubscription	spend	blocked
+recommendations apply	customers.recommendations.apply	spend	blocked
+recommendations dismiss	customers.recommendations.dismiss	write
+recommendations generate	customers.recommendations.generate	read
+remarketing-actions mutate	customers.remarketingActions.mutate	write
+remove-campaign-automatically-created-asset	customers.removeCampaignAutomaticallyCreatedAsset	delete
+reservations book-campaigns	customers.reservations.bookCampaigns	spend	blocked
+reservations quote-campaigns	customers.reservations.quoteCampaigns	read
+search	customers.googleAds.search	read
+search-audience-insights-attributes	customers.searchAudienceInsightsAttributes	read
+search-stream	customers.googleAds.searchStream	read
+shared-criteria mutate	customers.sharedCriteria.mutate	write
+shared-sets mutate	customers.sharedSets.mutate	write
+smart-campaign-settings generate-pmax-draft-campaign	customers.smartCampaignSettings.generatePMaxDraftCampaign	write
+smart-campaign-settings get-smart-campaign-status	customers.smartCampaignSettings.getSmartCampaignStatus	read
+smart-campaign-settings mutate	customers.smartCampaignSettings.mutate	write
+start-identity-verification	customers.startIdentityVerification	admin
+suggest-brands	customers.suggestBrands	read
+suggest-keyword-themes	customers.suggestKeywordThemes	read
+suggest-smart-campaign-ad	customers.suggestSmartCampaignAd	read
+suggest-smart-campaign-budget-options	customers.suggestSmartCampaignBudgetOptions	read
+suggest-travel-assets	customers.suggestTravelAssets	read
+third-party-app-analytics-links regenerate-shareable-link-id	customers.thirdPartyAppAnalyticsLinks.regenerateShareableLinkId	admin
+upload-call-conversions	customers.uploadCallConversions	admin
+upload-click-conversions	customers.uploadClickConversions	admin
+upload-conversion-adjustments	customers.uploadConversionAdjustments	admin
+upload-user-data	customers.uploadUserData	admin
+user-list-customer-types mutate	customers.userListCustomerTypes.mutate	write
+user-lists mutate	customers.userLists.mutate	write
+youtube-video-uploads remove	customers.youTubeVideoUploads.remove	delete
+youtube-video-uploads update	customers.youTubeVideoUploads.update	write
