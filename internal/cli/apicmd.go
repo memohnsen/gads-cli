@@ -26,11 +26,13 @@ func (a *app) apiCommand() *cobra.Command {
 			"for example v25/customers/1234567890/googleAds:search, without a query string (use --query k=v).\n\n" +
 			"A path that matches a known method, in any API version, inherits its risk class, the payload\n" +
 			"check, the budget cap and the block list. An unmatched POST, PUT, PATCH or DELETE is admin-class\n" +
-			"and needs --force. Read-only mode allows GET and read-class methods. Authorization, a\n" +
-			"developer-token header, the method-override headers (X-HTTP-Method-Override, X-HTTP-Method,\n" +
-			"X-Method-Override) and the credential query parameters access_token, oauth_token and key\n" +
-			"cannot be set. GET and DELETE take no --data. Each path segment must be non-empty and must not\n" +
-			"be \".\" or \"..\" or contain %, whitespace or a backslash.\n\n" +
+			"and needs --force, and every amountMicros or totalAmountMicros anywhere in its body is held to\n" +
+			"the budget cap, which --force does not override. Read-only mode allows GET and read-class\n" +
+			"methods. Authorization, a developer-token header, the method-override headers\n" +
+			"(X-HTTP-Method-Override, X-HTTP-Method, X-Method-Override) and the credential query parameters\n" +
+			"access_token, oauth_token and key cannot be set. GET and DELETE take no --data. Each path\n" +
+			"segment must be non-empty and must not be \".\" or \"..\" or contain %, whitespace or a\n" +
+			"backslash.\n\n" +
 			"The path carries the customer ID, so api does not use --customer-id.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -69,7 +71,8 @@ func (a *app) apiCommand() *cobra.Command {
 				return err
 			}
 			target := a.manifest.Find(method, path)
-			if target == nil {
+			unmatched := target == nil
+			if unmatched {
 				risk := manifest.RiskAdmin
 				if method == "GET" {
 					risk = manifest.RiskRead
@@ -78,6 +81,7 @@ func (a *app) apiCommand() *cobra.Command {
 			}
 			dec, err := guard.Check(a.manifest, target, body, guard.Options{
 				Force: flagBool(cmd, "force"), ReadOnly: a.res.ReadOnly, CapMicros: a.res.BudgetCapMicros,
+				Unmatched: unmatched,
 			})
 			if err != nil {
 				return err

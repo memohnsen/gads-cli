@@ -38,8 +38,10 @@ Access tokens are cached for at most one hour in `<user cache dir>/googleads/tok
   `key`.
 - It does not send a body with GET or DELETE, or any other method without a risk class the guard
   assigned. `googleads api` refuses a path with an empty, `.` or `..` segment, or with `%`,
-  whitespace or a backslash, before it matches the path against the known methods, so a budget
-  change cannot slip past the budget cap under another spelling.
+  whitespace or a backslash, before it matches the path against the known methods. A call whose
+  path still matches no known method has its whole body scanned, and every `amountMicros` and
+  `totalAmountMicros` in it is held to the budget cap, so a budget change cannot slip past the cap
+  under another spelling or method, even with `--force`.
 - It does not log credentials. `--verbose` logs method, path, status and response size.
 - It does not phone home. The catalog is compiled into the binary.
 - It prints a credential in exactly one place, on purpose: `googleads auth token`.

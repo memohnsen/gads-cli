@@ -35,11 +35,16 @@ func openOutput(path string) (*outputFile, error) {
 	return &outputFile{path: path, f: f, created: created}, nil
 }
 
-// write replaces the file's content with body and closes it.
+// write replaces the file's content with body and closes it. Only a regular
+// file is truncated: a device or a pipe (/dev/null, /dev/stdout) cannot be,
+// and has no earlier content to replace.
 func (o *outputFile) write(body []byte) error {
 	f := o.f
 	o.f = nil
-	err := f.Truncate(0)
+	fi, err := f.Stat()
+	if err == nil && fi.Mode().IsRegular() {
+		err = f.Truncate(0)
+	}
 	if err == nil {
 		_, err = f.Write(body)
 	}

@@ -2,9 +2,12 @@ package cli
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -117,5 +120,35 @@ func TestMaxPagesBelowOneIsUsage(t *testing.T) {
 	}
 	if n := srv.hits.Load(); n != 0 {
 		t.Fatalf("%d requests reached the server", n)
+	}
+}
+
+// A device such as /dev/null cannot be truncated; writing to it must still work.
+func TestOutputToNonRegularFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no /dev/null on Windows")
+	}
+	srv := newFakeServer(t, reply(`{"resourceNames":[]}`))
+	a, out, errb := testApp(t, srv, config.Resolved{})
+	if code := a.run([]string{"api", "GET", "v25/customers:listAccessibleCustomers", "--output", os.DevNull}); code != 0 || out.Len() != 0 {
+		t.Fatalf("exit %d stdout %q %s", code, out.String(), errb.String())
+	}
+	if _, err := os.Stat(os.DevNull); err != nil {
+		t.Fatalf("%s is gone: %v", os.DevNull, err)
+	}
+	// A pipe, as with --output /dev/stdout under a shell pipeline: macOS
+	// lets /dev/null be truncated, a pipe refuses on every Unix.
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	got := make(chan string)
+	go func() { b, _ := io.ReadAll(r); got <- string(b) }()
+	a, out, errb = testApp(t, srv, config.Resolved{})
+	code := a.run([]string{"api", "GET", "v25/customers:listAccessibleCustomers", "--output", fmt.Sprintf("/dev/fd/%d", w.Fd())})
+	w.Close()
+	if body := <-got; code != 0 || body != `{"resourceNames":[]}` || out.Len() != 0 {
+		t.Fatalf("pipe: exit %d, pipe got %q, stdout %q %s", code, body, out.String(), errb.String())
 	}
 }

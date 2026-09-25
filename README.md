@@ -295,8 +295,10 @@ How the body is read:
   inherits its class, the payload check, the budget cap and the block list. An unmatched POST, PUT,
   PATCH or DELETE is `admin`. In read-only mode it allows GET and `read`-class methods. GET and
   DELETE take no `--data`. Every path segment must be non-empty, must not be `.` or `..`, and must
-  not contain `%`, whitespace or a backslash, so no other spelling of a known path can dodge its
-  checks. It cannot set `Authorization`, a `developer-token` header, the method-override headers
+  not contain `%`, whitespace or a backslash, so the common re-spellings of a known path cannot
+  dodge its checks. The body of an unmatched call is scanned whole: every `amountMicros` and
+  `totalAmountMicros`, in either spelling and at any depth, must be plain digits within the budget
+  cap, and without a cap it is refused, whatever `--force` says. It cannot set `Authorization`, a `developer-token` header, the method-override headers
   `X-HTTP-Method-Override`, `X-HTTP-Method` and `X-Method-Override`, or the credential query
   parameters `access_token`, `oauth_token` and `key`, and it has no `--validate-only`. The path
   carries the customer, so `api` ignores `--customer-id`; it does honour `--login-customer-id`.

@@ -196,3 +196,43 @@ func TestAPIPathVariantsRefused(t *testing.T) {
 		t.Fatalf("canonical path: exit %d %s", code, errb.String())
 	}
 }
+
+// Spellings the manifest does not know become admin; --force lets an admin
+// call through, but not a budget amount past the cap.
+func TestAPIUnmatchedBodyAmountsMeetTheCap(t *testing.T) {
+	srv := newFakeServer(t, reply(`{}`))
+	canonical := "v25/customers/1234567890/campaignBudgets:mutate"
+	variants := [][2]string{
+		{"PUT", canonical},
+		{"PATCH", canonical},
+		{"POST", "v25/customers/1234567890/CampaignBudgets:mutate"},
+		{"POST", canonical + ";x=1"},
+		{"POST", canonical + ":"},
+		{"POST", canonical + ".json"},
+	}
+	for _, v := range variants {
+		a, _, errb := testApp(t, srv, config.Resolved{})
+		code := a.run([]string{"api", v[0], v[1], "--data", hugeBudget, "--force"})
+		if code != 2 || !strings.Contains(errJSON(t, errb)["error"].(string), "no budget cap") {
+			t.Errorf("%s %s: exit %d %s", v[0], v[1], code, errb.String())
+		}
+	}
+	if n := srv.hits.Load(); n != 0 {
+		t.Fatalf("%d requests reached the server", n)
+	}
+	// With a cap and an amount under it, the unmatched call goes through as admin.
+	under := `{"operations":[{"create":{"amountMicros":"29610000"}}]}`
+	a, _, errb := testApp(t, srv, config.Resolved{BudgetCapMicros: 30_000_000})
+	if code := a.run([]string{"api", "PATCH", canonical, "--data", under}); code != 2 || !strings.Contains(errb.String(), "admin") {
+		t.Fatalf("under cap without --force: exit %d %s", code, errb.String())
+	}
+	a, _, errb = testApp(t, srv, config.Resolved{BudgetCapMicros: 30_000_000})
+	if code := a.run([]string{"api", "PATCH", canonical, "--data", under, "--force"}); code != 0 || srv.hits.Load() != 1 {
+		t.Fatalf("under cap with --force: exit %d %s", code, errb.String())
+	}
+	// A body without an amount field is unaffected, cap or no cap.
+	a, _, errb = testApp(t, srv, config.Resolved{})
+	if code := a.run([]string{"api", "POST", "v25/customers/1234567890/somethingNew:do", "--data", `{"operations":[{"create":{"name":"x"}}]}`, "--force"}); code != 0 || srv.hits.Load() != 2 {
+		t.Fatalf("no amount: exit %d %s", code, errb.String())
+	}
+}

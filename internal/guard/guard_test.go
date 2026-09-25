@@ -139,3 +139,35 @@ func TestFindingsNameEveryOperation(t *testing.T) {
 		t.Fatalf("findings %+v err %v", d.Findings, err)
 	}
 }
+
+// An api call whose path matches no method still has every budget amount in
+// its body held to the cap, wherever it sits.
+func TestUnmatchedBodyAmountScan(t *testing.T) {
+	raw := &manifest.Method{ID: "raw POST v25/x", Command: []string{"api", "POST", "v25/x"}, Risk: "admin"}
+	cases := []struct {
+		name, body string
+		opt        Options
+		wantErr    string
+	}{
+		{"no cap", `{"operations":[{"create":{"amountMicros":"999999999999"}}]}`, Options{Force: true}, "no budget cap"},
+		{"snake case, no cap", `{"operations":[{"create":{"amount_micros":"1"}}]}`, Options{Force: true}, "no budget cap"},
+		{"total amount, no cap", `{"x":{"totalAmountMicros":"1"}}`, Options{Force: true}, "no budget cap"},
+		{"total amount snake case over cap", `{"x":[{"y":{"total_amount_micros":"30000001"}}]}`, Options{Force: true, CapMicros: cap30}, "exceeds the configured cap"},
+		{"over cap", `{"operations":[{"update":{"amountMicros":"30000001"}}]}`, Options{Force: true, CapMicros: cap30}, "exceeds the configured cap"},
+		{"not digits", `{"a":{"amountMicros":"2.9e7"}}`, Options{Force: true, CapMicros: cap30}, "micros"},
+		{"object value", `{"a":{"amountMicros":{"v":1}}}`, Options{Force: true, CapMicros: cap30}, "micros"},
+		{"mixed spellings", `{"amountMicros":"1","amount_micros":"999999999999"}`, Options{Force: true, CapMicros: cap30}, "both spellings"},
+		{"under cap", `{"operations":[{"create":{"amountMicros":"29610000"}}]}`, Options{Force: true, CapMicros: cap30}, ""},
+		{"no amount", `{"operations":[{"create":{"name":"x"}}]}`, Options{Force: true}, ""},
+		{"under cap still needs force", `{"amountMicros":"1"}`, Options{CapMicros: cap30}, "needs --force"},
+	}
+	for _, c := range cases {
+		d, err := Check(testManifest(), raw, []byte(c.body), Options{Force: c.opt.Force, CapMicros: c.opt.CapMicros, Unmatched: true})
+		switch {
+		case c.wantErr == "" && (err != nil || d.Class != "admin"):
+			t.Errorf("%s: class %q err %v", c.name, d.Class, err)
+		case c.wantErr != "" && (err == nil || !strings.Contains(err.Error(), c.wantErr)):
+			t.Errorf("%s: err %v, want %q", c.name, err, c.wantErr)
+		}
+	}
+}

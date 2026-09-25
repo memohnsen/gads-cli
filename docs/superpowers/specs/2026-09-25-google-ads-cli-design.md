@@ -357,9 +357,12 @@ How the body is read:
   calls and `--validate-only` calls only. Under it, `api` allows GET and calls that match a
   `read`-class method.
 - **`api` escape hatch:** a path that matches a manifest method inherits its class and the payload
-  check. An unmatched POST, PATCH or DELETE is `admin`. Every path segment follows the positional
-  rules (no `%`, whitespace, `\`, empty, `.` or `..` segment), so no spelling of a path can dodge the
-  match. The method-override headers (`X-HTTP-Method-Override`, `X-HTTP-Method`,
+  check. An unmatched POST, PUT, PATCH or DELETE is `admin`. Every path segment follows the
+  positional rules (no `%`, whitespace, `\`, empty, `.` or `..` segment), so the common re-spellings
+  of a path cannot dodge the match. The body of an unmatched call is scanned whole: every
+  `amountMicros` and `totalAmountMicros`, in either spelling and at any depth, is held to the
+  budget cap (none configured, above the cap, or not plain digits is refused), so `--force` on an
+  unmatched spelling cannot carry a budget past the cap. The method-override headers (`X-HTTP-Method-Override`, `X-HTTP-Method`,
   `X-Method-Override`) are refused, and so is a body on GET or DELETE. The client itself refuses a
   non-GET request that carries no risk class, so no call site can send a mutation past the guard.
 - **Not gated**, by decision: bids and bidding strategies, enabling ad groups, ads and keywords,

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -25,6 +26,10 @@ type Options struct {
 	ValidateOnly bool
 	ReadOnly     bool
 	CapMicros    int64 // 0 means no cap is configured
+	// Unmatched says meth is the api command's stand-in for a path no
+	// manifest method matches. Its body has no known shape, so every budget
+	// amount in it, wherever it sits, is held to the cap.
+	Unmatched bool
 }
 
 // Finding is one reason a call needs --force.
@@ -59,6 +64,15 @@ func Check(m *manifest.Manifest, meth *manifest.Method, body []byte, opt Options
 			return Decision{}, api.Usagef("refusing to send a mutate body the guard cannot read: %v", err)
 		}
 		if err := inspect(m, meth, obj, opt, &d); err != nil {
+			return Decision{}, err
+		}
+	}
+	if opt.Unmatched && len(body) > 0 {
+		obj, err := parseStrict(body)
+		if err != nil {
+			return Decision{}, api.Usagef("refusing to send a body the guard cannot read: %v", err)
+		}
+		if err := scanAmounts(obj, "", opt); err != nil {
 			return Decision{}, err
 		}
 	}
@@ -204,19 +218,65 @@ func inspectOperation(i int, resource string, op map[string]any, opt Options, d 
 			return api.Usagef("operation %d: fixed-total budgets (totalAmountMicros, or a period other than DAILY) are refused in this version; the budget cap is a daily cap", i)
 		}
 		if set("amountMicros") {
-			amount, err := micros(obj["amountMicros"])
+			amount, err := capAmount(fmt.Sprintf("operation %d", i), "amountMicros", obj["amountMicros"], opt)
 			if err != nil {
-				return api.Usagef("operation %d: amountMicros %v", i, err)
-			}
-			if opt.CapMicros == 0 {
-				return api.Usagef("operation %d sets a budget amount, but no budget cap is configured; a person sets one with: googleads config set budget-cap <amount>", i)
-			}
-			if amount > opt.CapMicros {
-				return api.Usagef("operation %d: budget amount %s (%d micros) exceeds the configured cap of %s (%d micros); --force does not override the cap",
-					i, config.FormatMicros(amount), amount, config.FormatMicros(opt.CapMicros), opt.CapMicros)
+				return err
 			}
 			if verb == "update" {
 				raise(d, i, manifest.RiskSpend, "budget amount changed to "+config.FormatMicros(amount))
+			}
+		}
+	}
+	return nil
+}
+
+// capAmount reads one budget amount and holds it to the cap. subject names
+// where it sits, for the message.
+func capAmount(subject, field string, v any, opt Options) (int64, error) {
+	amount, err := micros(v)
+	if err != nil {
+		return 0, api.Usagef("%s: %s %v", subject, field, err)
+	}
+	if opt.CapMicros == 0 {
+		return 0, api.Usagef("%s sets a budget amount, but no budget cap is configured; a person sets one with: googleads config set budget-cap <amount>", subject)
+	}
+	if amount > opt.CapMicros {
+		return 0, api.Usagef("%s: budget amount %s (%d micros) exceeds the configured cap of %s (%d micros); --force does not override the cap",
+			subject, config.FormatMicros(amount), amount, config.FormatMicros(opt.CapMicros), opt.CapMicros)
+	}
+	return amount, nil
+}
+
+// budgetAmountFields are the fields that set a budget amount, as parseStrict
+// returns them: lowerCamelCase, whichever spelling the caller used.
+var budgetAmountFields = map[string]bool{"amountMicros": true, "totalAmountMicros": true}
+
+// scanAmounts walks a body of unknown shape and holds every budget amount
+// field to the cap. Keys are visited in sorted order so the first refusal is
+// always the same one.
+func scanAmounts(v any, path string, opt Options) error {
+	switch t := v.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(t))
+		for k := range t {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			p := join(path, k)
+			if budgetAmountFields[k] {
+				if _, err := capAmount("the body at "+p, k, t[k], opt); err != nil {
+					return err
+				}
+			}
+			if err := scanAmounts(t[k], p, opt); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for i, x := range t {
+			if err := scanAmounts(x, fmt.Sprintf("%s[%d]", path, i), opt); err != nil {
+				return err
 			}
 		}
 	}
