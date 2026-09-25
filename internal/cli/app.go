@@ -30,6 +30,10 @@ type app struct {
 	stdin          io.Reader
 	// cacheDir locates the token cache; nil means os.UserCacheDir.
 	cacheDir func() (string, error)
+	// prompt and isTerminal are seams for `init`, the one interactive
+	// command; nil in production, where init uses the real terminal.
+	prompt     prompter
+	isTerminal func() bool
 }
 
 // Execute is the process entry point: it loads the embedded manifest and the
