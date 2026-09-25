@@ -1,0 +1,44 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - run: go vet ./...
+      - run: go test ./...
+
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      # The manifest is embedded, so a spec change that was never regenerated
+      # would ship a binary that disagrees with the spec in the same commit.
+      - name: manifest drift
+        run: go run ./tools/genmanifest -check
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+      - name: cross-compile
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          GOOS=linux  GOARCH=arm64 go build ./cmd/googleads
+          GOOS=darwin GOARCH=arm64 go build ./cmd/googleads
+          GOOS=windows GOARCH=amd64 go build ./cmd/googleads

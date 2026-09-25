@@ -250,6 +250,8 @@ mandatory reason, and the README lists it.
   `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_LOGIN_CUSTOMER_ID`, `GOOGLE_ADS_READ_ONLY`,
   `GOOGLE_ADS_API_BASE`, `GOOGLE_ADS_TOKEN_URL`, `GOOGLE_ADS_ALLOW_CUSTOM_BASE`.
 - **The budget cap has no environment variable and no flag.** It lives in the config file only.
+- `GOOGLE_ADS_READ_ONLY` only switches read-only mode on; it can never switch off a read-only mode
+  set in the config file. To turn that off, run `googleads config unset read-only`.
 - **`googleads init`** needs a terminal and refuses without one. It asks for the path of a key file,
   validates and stores the key, asks for the customer ID, then verifies with
   `list-accessible-customers` and a `search` for `customer.descriptive_name`,
