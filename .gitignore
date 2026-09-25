@@ -1,0 +1,11 @@
+bin/
+dist/
+*.test
+coverage.out
+
+# `go build ./cmd/googleads` drops the binary here; never commit it.
+/googleads
+/googleads.exe
+
+# Superpowers working artifacts: process scratch, not repo content.
+.superpowers/

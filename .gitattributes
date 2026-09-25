@@ -1,0 +1,6 @@
+# Text files are LF in the repository and on checkout, on every platform:
+# the generator's golden test byte-compares a file joined with "\n".
+* text=auto eol=lf
+
+# The embedded manifest is gzip; never rewrite its bytes.
+internal/manifest/manifest.json.gz binary
