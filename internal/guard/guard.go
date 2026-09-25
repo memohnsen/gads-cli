@@ -36,7 +36,10 @@ type Finding struct {
 
 // Decision is the outcome for a call that may be sent.
 type Decision struct {
-	Class    string    // the highest class found; what the client is told
+	// Class is the highest class found; what the client is told. Among the
+	// force classes (delete, spend, admin), which are peers, the first one
+	// found is kept.
+	Class    string
 	Findings []Finding // every reason above write
 }
 
@@ -148,6 +151,20 @@ func inspect(m *manifest.Manifest, meth *manifest.Method, body map[string]any, o
 
 // inspectOperation applies the payload rules to one create, update or remove.
 func inspectOperation(i int, resource string, op map[string]any, opt Options, d *Decision) error {
+	verbs := 0
+	for _, v := range []string{"create", "update", "remove"} {
+		if _, ok := op[v]; ok {
+			verbs++
+		}
+	}
+	if verbs > 1 {
+		return api.Usagef("operation %d names more than one of create, update, remove", i)
+	}
+	if m, ok := op["updateMask"]; ok {
+		if _, isString := m.(string); !isString {
+			return api.Usagef("operation %d: updateMask must be a comma-separated string of field paths", i)
+		}
+	}
 	if _, ok := op["remove"]; ok {
 		what := resource
 		if what == "" {
@@ -182,8 +199,9 @@ func inspectOperation(i int, resource string, op map[string]any, opt Options, d 
 			raise(d, i, manifest.RiskSpend, "campaign moved to another budget")
 		}
 	case "CampaignBudget":
-		if set("totalAmountMicros") || obj["period"] == "CUSTOM_PERIOD" {
-			return api.Usagef("operation %d: fixed-total budgets (totalAmountMicros, period CUSTOM_PERIOD) are refused in this version; the budget cap is a daily cap", i)
+		period, hasPeriod := obj["period"]
+		if set("totalAmountMicros") || (hasPeriod && period != "DAILY") {
+			return api.Usagef("operation %d: fixed-total budgets (totalAmountMicros, or a period other than DAILY) are refused in this version; the budget cap is a daily cap", i)
 		}
 		if set("amountMicros") {
 			amount, err := micros(obj["amountMicros"])

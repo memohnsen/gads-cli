@@ -87,6 +87,15 @@ func TestCheck(t *testing.T) {
 		{"not JSON", "customers.campaigns.mutate", `{"operations":`, Options{Force: true}, "", "cannot read"},
 		{"operations not an array", "customers.campaigns.mutate", `{"operations":{"create":{}}}`, Options{Force: true}, "", "must be a JSON array"},
 		{"validateOnly in the body does not count", "customers.campaigns.mutate", `{"validateOnly":true,"operations":[{"create":{"status":"ENABLED"}}]}`, Options{}, "", "needs --force"},
+		{"remove and create, forced above the cap", "customers.campaignBudgets.mutate", `{"operations":[{"remove":"customers/1/campaignBudgets/9","create":{"amountMicros":"999000000000"}}]}`, Options{Force: true, CapMicros: cap30}, "", "more than one of create, update, remove"},
+		{"create and update", "customers.campaigns.mutate", `{"operations":[{"create":{"status":"PAUSED"},"update":{"resourceName":"customers/1/campaigns/2","status":"ENABLED"},"updateMask":"status"}]}`, Options{}, "", "more than one of create, update, remove"},
+		{"create and update in snake_case", "customers.googleAds.mutate", `{"mutate_operations":[{"campaign_operation":{"create":{"status":"PAUSED"},"update":{"status":"ENABLED"}}}]}`, Options{Force: true}, "", "more than one of create, update, remove"},
+		{"numeric period", "customers.campaignBudgets.mutate", `{"operations":[{"create":{"period":3,"amountMicros":"1"}}]}`, Options{Force: true, CapMicros: cap30}, "", "fixed-total"},
+		{"daily period", "customers.campaignBudgets.mutate", `{"operations":[{"create":{"period":"DAILY","amountMicros":"1"}}]}`, withCap, "write", ""},
+		{"updateMask not a string", "customers.campaigns.mutate", `{"operations":[{"update":{"resourceName":"customers/1/campaigns/2"},"updateMask":{"paths":["status"]}}]}`, Options{Force: true}, "", "updateMask must be"},
+		{"amount only in the mask", "customers.campaignBudgets.mutate", `{"operations":[{"update":{"resourceName":"customers/1/campaignBudgets/9"},"updateMask":"amount_micros"}]}`, withCap, "", "budget amount changed to"},
+		{"amount only in the mask, forced", "customers.campaignBudgets.mutate", `{"operations":[{"update":{"resourceName":"customers/1/campaignBudgets/9"},"updateMask":"amount_micros"}]}`, Options{Force: true, CapMicros: cap30}, "spend", ""},
+		{"amount only in the mask, no cap", "customers.campaignBudgets.mutate", `{"operations":[{"update":{"resourceName":"customers/1/campaignBudgets/9"},"updateMask":"amount_micros"}]}`, Options{Force: true}, "", "no budget cap"},
 	}
 	for _, c := range cases {
 		d, err := check(c.id, c.body, c.opt)

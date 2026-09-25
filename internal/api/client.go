@@ -101,6 +101,11 @@ func (c *Client) guard(r Request) *Error {
 			return Usagef("query parameter %q carries a credential; the client owns authentication", k)
 		}
 	}
+	for k := range r.Headers {
+		if strings.EqualFold(strings.ReplaceAll(k, "_", "-"), "developer-token") {
+			return Usagef("refusing to send a developer-token header: googleads authenticates with a service account only")
+		}
+	}
 	return nil
 }
 
@@ -224,6 +229,16 @@ func (c *Client) Do(ctx context.Context, r Request) (*Response, error) {
 	var waited time.Duration
 	transientTries := 0
 	backoff := time.Second
+	// pause waits before the next attempt. A context cancelled meanwhile
+	// ends the call: another attempt would only fail, and for a mutation it
+	// would turn a clean refusal into an unknown outcome.
+	pause := func(d time.Duration) *Error {
+		sleep(d)
+		if err := ctx.Err(); err != nil {
+			return &Error{Kind: KindTransport, Message: fmt.Sprintf("%s %s: cancelled while waiting to retry: %v", r.Method, r.Path, err)}
+		}
+		return nil
+	}
 	for {
 		resp, err := c.attempt(ctx, r)
 		if err != nil {
@@ -235,7 +250,9 @@ func (c *Client) Do(ctx context.Context, r Request) (*Response, error) {
 			if e.Kind == KindTransport && r.readSafe() {
 				transientTries++
 				if transientTries < maxAttempts {
-					sleep(backoff)
+					if e := pause(backoff); e != nil {
+						return nil, e
+					}
 					backoff *= 2
 					continue
 				}
@@ -267,13 +284,17 @@ func (c *Client) Do(ctx context.Context, r Request) (*Response, error) {
 			}
 			waited += wait
 			c.logf("* 429, waiting %s", wait)
-			sleep(wait)
+			if e := pause(wait); e != nil {
+				return nil, e
+			}
 			backoff *= 2
 			continue
 		case resp.Status >= 500 && r.readSafe():
 			transientTries++
 			if transientTries < maxAttempts {
-				sleep(backoff)
+				if e := pause(backoff); e != nil {
+					return nil, e
+				}
 				backoff *= 2
 				continue
 			}

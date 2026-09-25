@@ -219,3 +219,43 @@ func TestTokenSourceErrorKeepsItsKind(t *testing.T) {
 		t.Fatalf("%+v", e)
 	}
 }
+
+func TestDeveloperTokenHeaderRefused(t *testing.T) {
+	var hits int32
+	c, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) { atomic.AddInt32(&hits, 1); w.Write([]byte(`{}`)) })
+	for _, name := range []string{"developer-token", "Developer-Token", "DEVELOPER-TOKEN", "developer_token"} {
+		r := search
+		r.Headers = http.Header{name: {"x"}}
+		_, err := c.Do(context.Background(), r)
+		if e := asErr(t, err); e.Kind != KindUsage || !strings.Contains(e.Message, "developer-token") {
+			t.Errorf("%s: %+v", name, e)
+		}
+	}
+	if atomic.LoadInt32(&hits) != 0 {
+		t.Fatalf("%d requests sent", hits)
+	}
+}
+
+func TestCancelledDuringRetryWaitStops(t *testing.T) {
+	cases := map[string]struct {
+		status int
+		r      Request
+	}{
+		"mutation on 429": {429, Request{Method: "POST", Path: "v25/customers/1/campaigns:mutate", Body: []byte(`{}`), Risk: manifest.RiskWrite}},
+		"read on 503":     {503, search},
+	}
+	for name, tc := range cases {
+		var hits int32
+		c, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			atomic.AddInt32(&hits, 1)
+			w.WriteHeader(tc.status)
+		})
+		ctx, cancel := context.WithCancel(context.Background())
+		c.Sleep = func(time.Duration) { cancel() }
+		_, err := c.Do(ctx, tc.r)
+		e := asErr(t, err)
+		if e.Kind != KindTransport || !strings.Contains(e.Message, "cancel") || atomic.LoadInt32(&hits) != 1 {
+			t.Errorf("%s: %+v after %d attempts", name, e, hits)
+		}
+	}
+}

@@ -215,3 +215,29 @@ func TestRefusedExchangeIsAuthError(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestTokenEndpointUnavailableIsTransport(t *testing.T) {
+	cases := map[int]string{
+		503: api.KindTransport,
+		500: api.KindTransport,
+		429: api.KindTransport,
+		401: api.KindAuth,
+		403: api.KindAuth,
+	}
+	k, _ := ParseKey(keyJSON(t, "kid-1"))
+	for status, kind := range cases {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			w.Write([]byte(`{"error":"x","error_description":"y"}`))
+		}))
+		s := &Source{Key: k, TokenURL: srv.URL + "/token", AllowCustomBase: true, HTTP: srv.Client(),
+			CacheDir: func() (string, error) { return t.TempDir(), nil }}
+		_, err := s.Token(context.Background())
+		srv.Close()
+		var e *api.Error
+		if !errors.As(err, &e) || e.Kind != kind || e.Status != status {
+			t.Errorf("HTTP %d: err = %+v, want kind %s with status", status, e, kind)
+		}
+	}
+}

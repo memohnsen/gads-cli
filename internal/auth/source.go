@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -101,14 +102,24 @@ func (s *Source) mint(ctx context.Context) (*oauth2.Token, error) {
 				code, desc = body.Error, body.ErrorDescription
 			}
 		}
-		msg := "token exchange refused"
+		reason := ""
 		if code != "" {
-			msg += ": " + code
+			reason += ": " + code
 		}
 		if desc != "" {
-			msg += ": " + desc
+			reason += ": " + desc
 		}
-		return nil, &api.Error{Kind: api.KindAuth, Message: msg + " (was the key deleted or disabled in the Cloud Console?)"}
+		status := 0
+		if re.Response != nil {
+			status = re.Response.StatusCode
+		}
+		// 429 and 5xx say nothing about the key: the endpoint is busy or down.
+		if status == http.StatusTooManyRequests || status >= 500 {
+			return nil, &api.Error{Kind: api.KindTransport, Status: status,
+				Message: fmt.Sprintf("token exchange: the token endpoint is unavailable (HTTP %d)%s; try again later", status, reason)}
+		}
+		return nil, &api.Error{Kind: api.KindAuth, Status: status,
+			Message: "token exchange refused" + reason + " (was the key deleted or disabled in the Cloud Console?)"}
 	}
 	return nil, &api.Error{Kind: api.KindTransport, Message: "token exchange: " + err.Error()}
 }
