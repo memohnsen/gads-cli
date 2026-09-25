@@ -30,6 +30,9 @@ func (a *app) runAll(cmd *cobra.Command, meth *manifest.Method, base api.Request
 		if wantsSummaryRow(body) {
 			return api.Usagef("--all merges rows only and would drop the summary row; page by hand or use search-stream when you need searchSettings.returnSummaryRow")
 		}
+		// A page token in --data would start the walk mid-stream and drop
+		// the pages before it, so the walk always starts at the first page.
+		delete(body, "pageToken")
 		delete(body, "page_token")
 	}
 	var rows []json.RawMessage

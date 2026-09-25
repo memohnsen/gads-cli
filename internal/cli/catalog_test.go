@@ -88,3 +88,12 @@ func TestSchemaAmbiguousAndUnknown(t *testing.T) {
 		t.Fatalf("exit %d %s", code, errb.String())
 	}
 }
+
+func TestSchemaJSONKeepsAngleBracketsLiteral(t *testing.T) {
+	a, out, _ := testApp(t, nil, config.Resolved{})
+	a.manifest.Schemas["GoogleAdsGoogleadsV25Resources_Campaign_NetworkSettings"] = manifest.Schema{
+		Fields: []manifest.Field{{Name: "x", Type: "string", Doc: "a < b & c > d"}}}
+	if code := a.run([]string{"schema", "Campaign_NetworkSettings", "--json"}); code != 0 || !strings.Contains(out.String(), "a < b & c > d") {
+		t.Fatalf("exit %d stdout %q", code, out.String())
+	}
+}

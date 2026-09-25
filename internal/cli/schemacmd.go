@@ -30,7 +30,9 @@ func (a *app) schemaCommand() *cobra.Command {
 			}
 			fields := a.manifest.Schemas[id].Fields
 			if asJSON {
-				return json.NewEncoder(a.stdout).Encode(struct {
+				enc := json.NewEncoder(a.stdout)
+				enc.SetEscapeHTML(false)
+				return enc.Encode(struct {
 					Name   string           `json:"name"`
 					ID     string           `json:"id"`
 					Fields []manifest.Field `json:"fields"`

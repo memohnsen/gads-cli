@@ -8,7 +8,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -130,9 +129,9 @@ func (a *app) renderError(err error) int {
 	if !errors.As(err, &apiErr) {
 		apiErr = api.Usagef("%v", err) // anything else is a cobra parse or usage failure
 	}
-	raw, mErr := json.Marshal(apiErr)
+	raw, mErr := jsonCompact(apiErr)
 	if mErr != nil {
-		raw, mErr = json.Marshal(&api.Error{Kind: apiErr.Kind, Message: apiErr.Message, Status: apiErr.Status, RequestID: apiErr.RequestID})
+		raw, mErr = jsonCompact(&api.Error{Kind: apiErr.Kind, Message: apiErr.Message, Status: apiErr.Status, RequestID: apiErr.RequestID})
 		if mErr != nil {
 			raw = []byte(`{"error":"internal: cannot render error","kind":"usage","details":null}`)
 		}

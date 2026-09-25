@@ -428,3 +428,37 @@ func TestEmbeddedManifestBuildsTheTree(t *testing.T) {
 		}
 	}
 }
+
+func TestAllDropsAStalePageToken(t *testing.T) {
+	srv := newFakeServer(t, func(w http.ResponseWriter, r *http.Request, body string) {
+		switch {
+		case strings.Contains(body, `"pageToken":"p2"`):
+			w.Write([]byte(`{"results":[3]}`))
+		case strings.Contains(body, "stale"):
+			w.Write([]byte(`{"results":[9]}`))
+		default:
+			w.Write([]byte(`{"results":[1,2],"nextPageToken":"p2"}`))
+		}
+	})
+	for _, key := range []string{"pageToken", "page_token"} {
+		a, out, errb := testApp(t, srv, config.Resolved{CustomerID: "1234567890"})
+		n := len(srv.bodies)
+		if code := a.run([]string{"search", "--all", "--data", `{"query":"x","` + key + `":"stale"}`}); code != 0 {
+			t.Fatalf("%s: exit %d: %s", key, code, errb.String())
+		}
+		if first := srv.bodies[n]; strings.Contains(first, "pageToken") || strings.Contains(first, "page_token") {
+			t.Fatalf("%s: first request carries a page token: %q", key, first)
+		}
+		if out.String() != "[1,2,3]\n" {
+			t.Fatalf("%s: stdout %q", key, out.String())
+		}
+	}
+}
+
+func TestErrorJSONKeepsAngleBracketsLiteral(t *testing.T) {
+	a, _, errb := testApp(t, nil, config.Resolved{})
+	if code := a.run([]string{"schema", "<a&b>"}); code != 2 || !strings.Contains(errb.String(), "<a&b>") {
+		t.Fatalf("exit %d stderr %q", code, errb.String())
+	}
+	errJSON(t, errb)
+}

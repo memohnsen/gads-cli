@@ -27,7 +27,8 @@ func (a *app) apiCommand() *cobra.Command {
 			"A path that matches a known method, in any API version, inherits its risk class, the payload\n" +
 			"check, the budget cap and the block list. An unmatched POST, PUT, PATCH or DELETE is admin-class\n" +
 			"and needs --force. Read-only mode allows GET and read-class methods. Authorization and the\n" +
-			"credential query parameters access_token, oauth_token and key cannot be set.",
+			"credential query parameters access_token, oauth_token and key cannot be set.\n\n" +
+			"The path carries the customer ID, so api does not use --customer-id.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			method := strings.ToUpper(args[0])
