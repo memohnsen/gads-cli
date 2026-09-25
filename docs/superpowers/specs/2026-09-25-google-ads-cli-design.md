@@ -76,7 +76,7 @@ Sources: [sunset dates](https://developers.google.com/google-ads/api/docs/sunset
 | Dry run | none | `--validate-only`: Google validates the request fully and applies nothing |
 | Paging | offset or page envelope | page tokens; `--all` merges the result rows |
 | API version | unversioned paths | pinned to `v25`; a new version is a spec refresh plus review |
-| Error kinds | ten | the same ten plus `partial_failure` and `conflict` |
+| Error kinds | ten | the same ten plus `partial_failure`, `conflict` and `output_failed` |
 
 Everything else is carried over deliberately: Go and cobra, a single static binary
 (`CGO_ENABLED=0`), stdout reserved for the response, one line of JSON on stderr per failure, exit
@@ -183,7 +183,9 @@ mandatory reason, and the README lists it.
 - **Reports:** `search` and `search-stream` also take `--query <GAQL>` or `--query @file.gaql`,
   which builds `{"query": ...}`. `--query` together with `--data` is a usage error.
 - **Output:** the API response, untouched, on stdout. int64 values arrive as strings, as Google
-  sends them. `--output <file>` writes the body to a file instead.
+  sends them. `--output <file>` writes the body to a file instead. The file is opened before the
+  request, so a bad path is a usage error with nothing sent. If writing still fails after a 2xx,
+  the response goes to stdout and the call exits 1 with kind `output_failed`.
 - **`--all`:** available on methods whose request has `pageToken` and whose response has
   `nextPageToken` (`search`, `generate-keyword-ideas`, `google-ads-fields search` and others). It
   follows the tokens and prints one JSON array of the merged result rows, the only transformation
@@ -355,7 +357,11 @@ How the body is read:
   calls and `--validate-only` calls only. Under it, `api` allows GET and calls that match a
   `read`-class method.
 - **`api` escape hatch:** a path that matches a manifest method inherits its class and the payload
-  check. An unmatched POST, PATCH or DELETE is `admin`.
+  check. An unmatched POST, PATCH or DELETE is `admin`. Every path segment follows the positional
+  rules (no `%`, whitespace, `\`, empty, `.` or `..` segment), so no spelling of a path can dodge the
+  match. The method-override headers (`X-HTTP-Method-Override`, `X-HTTP-Method`,
+  `X-Method-Override`) are refused, and so is a body on GET or DELETE. The client itself refuses a
+  non-GET request that carries no risk class, so no call site can send a mutation past the guard.
 - **Not gated**, by decision: bids and bidding strategies, enabling ad groups, ads and keywords,
   negative keywords, conversion actions, and pausing anything. The budget bounds what those can
   cost, and switching a campaign on is gated.
@@ -382,7 +388,9 @@ pointers to where the key lives, happens in that workspace and is not part of th
     prints the full response on stdout and exits 1;
   - `conflict`: HTTP 409, or a failure whose error is `databaseError.CONCURRENT_MODIFICATION`.
     Without `--partial-failure` the request was rejected as a whole, and Google documents this
-    error as retryable after a short wait.
+    error as retryable after a short wait;
+  - `output_failed`: the call succeeded, but its response could not be written to the `--output`
+    file or to stdout. Exit 1. A change must not be repeated.
 - **Mapping:** 400 to `validation`, 401 to `auth`, 403 to `forbidden`, 404 to `not_found`, 409 to
   `conflict`, 429 to `rate_limited`, 5xx to `server`, 3xx to `validation` (redirects are refused and
   the message names the `Location`). A concurrent-modification failure is `conflict` whatever its
