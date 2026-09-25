@@ -105,3 +105,17 @@ func TestStdoutWriteFailureIsReported(t *testing.T) {
 		t.Fatalf("exit %d %s", code, errb.String())
 	}
 }
+
+func TestMaxPagesBelowOneIsUsage(t *testing.T) {
+	srv := newFakeServer(t, reply(`{"results":[]}`))
+	for _, n := range []string{"0", "-1"} {
+		a, out, errb := testApp(t, srv, config.Resolved{})
+		code := a.run([]string{"search", "--customer-id", "1234567890", "--query", "SELECT campaign.id FROM campaign", "--all", "--max-pages", n})
+		if code != 2 || !strings.Contains(errJSON(t, errb)["error"].(string), "--max-pages") || out.Len() != 0 {
+			t.Errorf("--max-pages %s: exit %d stdout %q %s", n, code, out.String(), errb.String())
+		}
+	}
+	if n := srv.hits.Load(); n != 0 {
+		t.Fatalf("%d requests reached the server", n)
+	}
+}

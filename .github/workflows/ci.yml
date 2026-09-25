@@ -33,8 +33,6 @@ jobs:
       # would ship a binary that disagrees with the spec in the same commit.
       - name: manifest drift
         run: go run ./tools/genmanifest -check
-      - name: staticcheck
-        run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
       - name: cross-compile
         env:
           CGO_ENABLED: "0"

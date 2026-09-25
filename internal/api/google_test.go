@@ -100,3 +100,18 @@ func TestPartialFailure(t *testing.T) {
 		t.Fatal("no partialFailureError means no error")
 	}
 }
+
+// The planning hint is for planning reads and generators; a keyword-plan or
+// audience mutate refused with 403 has another cause.
+func TestPlanningHintSkipsMutates(t *testing.T) {
+	denied := `{"error":{"code":403,"message":"denied","status":"PERMISSION_DENIED"}}`
+	for _, id := range []string{"customers.keywordPlans.mutate", "customers.keywordPlanAdGroups.mutate", "customers.audiences.mutate",
+		"raw POST v25/customers/1234567890/keywordPlanCampaigns:mutate"} {
+		c, _ := testClient(t, respond(403, denied, nil))
+		r := Request{Method: "POST", Path: "v25/customers/1234567890/x:mutate", Body: []byte(`{}`), Risk: "write", MethodID: id}
+		_, err := c.Do(context.Background(), r)
+		if e := asErr(t, err); strings.Contains(e.Message, "planning services") {
+			t.Errorf("%s: %q", id, e.Message)
+		}
+	}
+}

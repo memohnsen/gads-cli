@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/wir-drei-digital/google-ads-cli/internal/api"
 	"github.com/wir-drei-digital/google-ads-cli/internal/auth"
 	"github.com/wir-drei-digital/google-ads-cli/internal/config"
@@ -23,9 +25,13 @@ import (
 )
 
 type app struct {
-	manifest       *manifest.Manifest
-	client         *api.Client
-	res            config.Resolved
+	manifest *manifest.Manifest
+	client   *api.Client
+	res      config.Resolved
+	// configErr is why the configuration could not be resolved. Only
+	// version and the config commands run without it, so a person can find
+	// and repair the file; every other command reports it.
+	configErr      error
 	stdout, stderr io.Writer
 	stdin          io.Reader
 	// cacheDir locates the token cache; nil means os.UserCacheDir.
@@ -44,19 +50,40 @@ func Execute(args []string) int {
 	if err != nil {
 		return (&app{stderr: os.Stderr}).renderError(api.Usagef("%v: this build's embedded manifest is unreadable, reinstall googleads", err))
 	}
-	res, err := config.Resolve(os.Getenv)
-	if err != nil {
-		return (&app{stderr: os.Stderr}).renderError(api.Usagef("%v", err))
-	}
 	// Ctrl-C and SIGTERM cancel the request in flight and any retry wait.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	a := &app{manifest: m, res: res, stdout: os.Stdout, stderr: os.Stderr, stdin: os.Stdin}
-	a.client = &api.Client{
-		BaseURL: res.APIBase, LoginCustomerID: res.LoginCustomerID, ReadOnly: res.ReadOnly,
-		AllowCustomBase: res.AllowCustomBase, TokenSource: a.tokenSource(), Sleep: contextSleeper(ctx),
-	}
+	a := &app{manifest: m, stdout: os.Stdout, stderr: os.Stderr, stdin: os.Stdin}
+	a.configure(os.Getenv, contextSleeper(ctx))
 	return a.runContext(ctx, args)
+}
+
+// configure resolves the config file and the environment and builds the
+// client. A failure is kept in configErr rather than returned: the root
+// command reports it for every command that needs the configuration.
+func (a *app) configure(getenv func(string) string, sleep func(time.Duration)) {
+	a.res, a.configErr = config.Resolve(getenv)
+	a.client = &api.Client{
+		BaseURL: a.res.APIBase, LoginCustomerID: a.res.LoginCustomerID, ReadOnly: a.res.ReadOnly,
+		AllowCustomBase: a.res.AllowCustomBase, TokenSource: a.tokenSource(), Sleep: sleep,
+	}
+}
+
+// requireConfig is the root's persistent pre-run: with an unresolvable
+// configuration only version, help and the config commands run.
+func (a *app) requireConfig(cmd *cobra.Command, args []string) error {
+	if a.configErr == nil {
+		return nil
+	}
+	for c := cmd; c.HasParent(); c = c.Parent() {
+		if !c.Parent().HasParent() { // c is a top-level command
+			switch c.Name() {
+			case "version", "config", "help":
+				return nil
+			}
+		}
+	}
+	return api.Usagef("cannot load the configuration: %v", a.configErr)
 }
 
 // tokenSource loads the key on the first API call, so a missing or broken

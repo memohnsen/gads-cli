@@ -33,8 +33,13 @@ Access tokens are cached for at most one hour in `<user cache dir>/googleads/tok
   inside a key file is ignored.
 - It does not follow redirects, on either host.
 - It does not take a key or token from argv, and `googleads api` cannot set `Authorization`, a
-  `developer-token` header, or the credential query parameters `access_token`, `oauth_token` and
+  `developer-token` header, the method-override headers `X-HTTP-Method-Override`, `X-HTTP-Method`
+  and `X-Method-Override`, or the credential query parameters `access_token`, `oauth_token` and
   `key`.
+- It does not send a body with GET or DELETE, or any other method without a risk class the guard
+  assigned. `googleads api` refuses a path with an empty, `.` or `..` segment, or with `%`,
+  whitespace or a backslash, before it matches the path against the known methods, so a budget
+  change cannot slip past the budget cap under another spelling.
 - It does not log credentials. `--verbose` logs method, path, status and response size.
 - It does not phone home. The catalog is compiled into the binary.
 - It prints a credential in exactly one place, on purpose: `googleads auth token`.

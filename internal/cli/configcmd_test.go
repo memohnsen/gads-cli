@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -133,5 +134,49 @@ func TestConfigEnvNameSuggestion(t *testing.T) {
 	a, _, errb := testApp(t, nil, config.Resolved{})
 	if code := a.run([]string{"config", "set", "GOOGLE_ADS_CUSTOMER_ID", "1"}); code != 2 || !strings.Contains(errb.String(), "config set customer-id") {
 		t.Fatalf("exit %d %s", code, errb.String())
+	}
+}
+
+// A corrupt config file must not lock a person out of the commands that
+// find and repair it; everything else names the file and stops.
+func TestCorruptConfigLeavesVersionAndConfigWorking(t *testing.T) {
+	isolate(t)
+	p, err := config.Path()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(`{"budget_cap_micros":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	newApp := func() (*app, *bytes.Buffer, *bytes.Buffer) {
+		var out, errb bytes.Buffer
+		a := &app{manifest: testManifest(), stdout: &out, stderr: &errb, stdin: strings.NewReader("")}
+		a.configure(func(string) string { return "" }, nil)
+		return a, &out, &errb
+	}
+	a, out, errb := newApp()
+	if code := a.run([]string{"version"}); code != 0 {
+		t.Fatalf("version: exit %d %s", code, errb.String())
+	}
+	a, out, errb = newApp()
+	if code := a.run([]string{"config", "path"}); code != 0 || strings.TrimSpace(out.String()) != p {
+		t.Fatalf("config path: exit %d %q %s", code, out.String(), errb.String())
+	}
+	// config set and unset run and say what is wrong with the file.
+	a, _, errb = newApp()
+	if code := a.run([]string{"config", "set", "customer-id", "1234567890"}); code != 2 || !strings.Contains(errJSON(t, errb)["error"].(string), p) {
+		t.Fatalf("config set: exit %d %s", code, errb.String())
+	}
+	for _, args := range [][]string{
+		{"search", "--customer-id", "1234567890", "--query", "SELECT campaign.id FROM campaign"},
+		{"auth", "status"},
+	} {
+		a, _, errb = newApp()
+		if code := a.run(args); code != 2 || !strings.Contains(errJSON(t, errb)["error"].(string), p) {
+			t.Fatalf("%v: exit %d %s", args, code, errb.String())
+		}
 	}
 }

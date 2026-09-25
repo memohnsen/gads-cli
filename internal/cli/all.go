@@ -17,6 +17,9 @@ import (
 // success: the partial array is written and the run ends as incomplete.
 func (a *app) runAll(cmd *cobra.Command, meth *manifest.Method, base api.Request, out *outputFile) error {
 	maxPages, _ := cmd.Flags().GetInt("max-pages")
+	if maxPages < 1 {
+		return api.Usagef("--max-pages must be at least 1, got %d", maxPages)
+	}
 	var body map[string]any
 	if meth.Paging == manifest.PagingBodyToken {
 		body = map[string]any{}

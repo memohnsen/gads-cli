@@ -17,9 +17,10 @@ func (a *app) newRoot() *cobra.Command {
 			"and `googleads schema <Name>` for the fields of a resource.",
 		// The root names no method. Printing help and exiting 0 would read as
 		// success and break the stdout contract, so it is a usage error.
-		RunE:          groupRunE,
-		SilenceErrors: true,
-		SilenceUsage:  true,
+		RunE:              groupRunE,
+		PersistentPreRunE: a.requireConfig,
+		SilenceErrors:     true,
+		SilenceUsage:      true,
 	}
 	pf := root.PersistentFlags()
 	pf.Bool("verbose", false, "log requests to stderr (credentials are never logged)")

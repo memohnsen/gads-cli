@@ -52,6 +52,10 @@ Each release also ships `checksums.txt`. Unpack the archive and put `googleads` 
    ```
 
    Delete the downloaded key file afterwards.
+
+   `init` does not ask for a login customer ID. If the service account reaches the account through
+   a manager account, run `googleads config set login-customer-id <manager-id>` before `init`, so
+   that its access check goes through the manager too.
 6. In an account that already has campaigns, look for campaigns that lack the EU political
    advertising declaration before the first change. One undeclared campaign blocks every campaign
    change in the account:
@@ -192,7 +196,10 @@ googleads api GET v25/customers:listAccessibleCustomers   # raw request, guardra
 Bodies come from `--data '{...}'`, `--data @file.json` or `--data -` (stdin), up to 20 MB, and are
 sent as given, except that `--validate-only` and `--partial-failure` set `validateOnly` and
 `partialFailure`. Responses are Google's camelCase JSON, untouched; `--output <file>` writes the body
-to a file instead of stdout. int64 values (ids, `costMicros`, `amountMicros`, `clicks`) are strings.
+to a file instead of stdout. The file is opened before the request, so a path that cannot be written
+is a usage error and nothing is sent; a failed request leaves an existing file as it was. If the
+write still fails after Google accepted the call, the response goes to stdout and the exit is 1
+with kind `output_failed`. int64 values (ids, `costMicros`, `amountMicros`, `clicks`) are strings.
 Money is in micros: 1 unit of the account's currency is 1,000,000 micros.
 
 `--all` follows page tokens and prints one JSON array of the merged rows; it always starts at the
@@ -286,10 +293,13 @@ How the body is read:
   `read`-class calls and `--validate-only` calls only.
 - **`googleads api`** is not a bypass. A path that matches a known method, in any API version,
   inherits its class, the payload check, the budget cap and the block list. An unmatched POST, PUT,
-  PATCH or DELETE is `admin`. In read-only mode it allows GET and `read`-class methods. It cannot
-  set `Authorization`, a `developer-token` header, or the credential query parameters
-  `access_token`, `oauth_token` and `key`, and it has no `--validate-only`. The path carries the
-  customer, so `api` ignores `--customer-id`; it does honour `--login-customer-id`.
+  PATCH or DELETE is `admin`. In read-only mode it allows GET and `read`-class methods. GET and
+  DELETE take no `--data`. Every path segment must be non-empty, must not be `.` or `..`, and must
+  not contain `%`, whitespace or a backslash, so no other spelling of a known path can dodge its
+  checks. It cannot set `Authorization`, a `developer-token` header, the method-override headers
+  `X-HTTP-Method-Override`, `X-HTTP-Method` and `X-Method-Override`, or the credential query
+  parameters `access_token`, `oauth_token` and `key`, and it has no `--validate-only`. The path
+  carries the customer, so `api` ignores `--customer-id`; it does honour `--login-customer-id`.
 - **Pinned hosts.** Credentials go only to `oauth2.googleapis.com` and `googleads.googleapis.com`
   over HTTPS. `GOOGLE_ADS_API_BASE` and `GOOGLE_ADS_TOKEN_URL` pointing elsewhere are refused unless
   `GOOGLE_ADS_ALLOW_CUSTOM_BASE=1` is set too, and plain HTTP is allowed only on loopback. Redirects
@@ -350,6 +360,7 @@ first error: its code, its message and the field path. Branch on `kind`:
 | `outcome_unknown` | a change failed in flight and may or may not have been applied; check with `search` before retrying |
 | `incomplete` | `--all` hit `--max-pages`; stdout holds the partial array |
 | `partial_failure` | with `--partial-failure`, some operations failed; stdout holds the full response, including the ones that succeeded |
+| `output_failed` | the call succeeded, but the response could not be written to the `--output` file (it is on stdout instead) or to stdout; do not repeat a change |
 | `usage` | the command was wrong or a guardrail refused it; nothing was sent |
 
 Hints are appended to the message for the errors people hit during setup:
@@ -402,7 +413,7 @@ make build        # go build -o bin/googleads ./cmd/googleads
 make test         # go test ./...
 make generate     # regenerate internal/manifest/manifest.json.gz from the vendored Discovery document
 make update-spec  # re-fetch spec/googleads-v25.discovery.json (network; VERSION=vNN for another version)
-make check        # go vet + manifest drift check + tests: what CI runs
+make check        # go vet + manifest drift check + tests; CI runs these plus a CGO-free cross-compile
 ```
 
 `e2e/smoke_test.go` builds the real binary and drives it against a fake Google. `e2e/live_test.go`

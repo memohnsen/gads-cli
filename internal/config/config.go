@@ -59,7 +59,7 @@ func Load() (Config, error) {
 	}
 	var c Config
 	if err := json.Unmarshal(raw, &c); err != nil {
-		return Config{}, fmt.Errorf("%s is corrupt: %w", p, err)
+		return Config{}, fmt.Errorf("%s is corrupt, repair or delete it: %w", p, err)
 	}
 	return c, nil
 }

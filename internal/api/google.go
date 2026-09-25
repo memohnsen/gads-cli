@@ -139,7 +139,17 @@ func (f googleFailure) retryDelay() (time.Duration, bool) {
 	return 0, false
 }
 
-var planningMethod = regexp.MustCompile(`(?i)(keyword|reach|audience|insight|plannable|benchmark)`)
+var (
+	planningMethod = regexp.MustCompile(`(?i)(keyword|reach|audience|insight|plannable|benchmark)`)
+	mutateMethod   = regexp.MustCompile(`(?i)[.:]mutate`)
+)
+
+// isPlanning reports a planning read or generator (keyword ideas, forecasts,
+// reach, audience insights). The keyword-plan and audience mutates share the
+// words but not the access rule.
+func isPlanning(methodID string) bool {
+	return planningMethod.MatchString(methodID) && !mutateMethod.MatchString(methodID)
+}
 
 // hint appends the next step for the errors people hit while setting up.
 func hint(r Request, f googleFailure, status int) string {
@@ -150,7 +160,7 @@ func hint(r Request, f googleFailure, status int) string {
 		return "; hint: the service account has no access to this customer; add its email in Google Ads under Admin, Access and security, or set login-customer-id to the manager account it was added to"
 	case f.has("EU_POLITICAL_ADVERTISING_DECLARATION_REQUIRED"):
 		return `; hint: a campaign in this account lacks the EU political advertising declaration; find it with: googleads search --query "SELECT campaign.id, campaign.name FROM campaign WHERE campaign.missing_eu_political_advertising_declaration = TRUE"`
-	case status == http.StatusForbidden && planningMethod.MatchString(r.MethodID):
+	case status == http.StatusForbidden && isPlanning(r.MethodID):
 		return "; hint: Explorer access blocks planning services (Keyword Planner, reach, audience insights); Basic access is required"
 	}
 	return ""

@@ -48,17 +48,25 @@ Writing
   another way.
 - Blocked commands (recommendations apply, recommendation auto-apply subscriptions, reservation
   booking) always refuse. Read recommendations with search and carry out a good one through mutate.
+- `googleads api <METHOD> <path>` is for what the command tree lacks, and the same guardrails
+  apply. GET and DELETE take no --data; the method-override headers (X-HTTP-Method-Override,
+  X-HTTP-Method, X-Method-Override) are refused; every path segment must be non-empty, not "." or
+  "..", with no %, whitespace or backslash.
+- `--output <file>` writes the response to a file. A path that cannot be written is a usage error
+  and nothing is sent.
 
 Errors
 - stdout is the API response only. A failure is one line of JSON on stderr:
   {"kind","error","status","details","request_id"}. Exit 0 ok, 1 API or network error, 2 usage
   error, which includes every guardrail refusal.
 - kinds: auth, forbidden, not_found, validation, rate_limited, server, transport, outcome_unknown,
-  incomplete, usage, partial_failure, conflict.
+  incomplete, usage, partial_failure, conflict, output_failed.
 - outcome_unknown: the change may or may not have landed; check with search before retrying.
 - partial_failure (only with --partial-failure): stdout holds the full response; some operations failed.
 - conflict: the same resource changed concurrently; retry once after a short wait.
 - incomplete: --all hit --max-pages; the output is partial.
+- output_failed: the call succeeded, but the response could not be written; with --output it is on
+  stdout instead. Do not repeat a change.
 - The error text leads with Google's error code and field path, and may end with "hint: ..." naming
   the next step for the person (access level, account access, EU political declaration).
 - Rate limits are retried automatically; do not add a retry loop of your own.
