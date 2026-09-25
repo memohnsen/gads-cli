@@ -134,8 +134,9 @@ regenerates the manifest and fails on drift.
 
 ### Command naming
 
-Take the Discovery method id, drop a leading `customers` segment and a version segment (`v25`),
-and kebab-case what remains:
+The method id is Discovery's `id` without its `googleads.` prefix (`googleads.customers.campaigns.mutate`
+becomes `customers.campaigns.mutate`); it contains no version, so ids and commands survive a
+version change. Drop a leading `customers` segment and kebab-case what remains:
 
 | Discovery method id | Command |
 | --- | --- |
@@ -145,7 +146,7 @@ and kebab-case what remains:
 | `customers.listAccessibleCustomers` | `googleads list-accessible-customers` |
 | `googleAdsFields.search` | `googleads google-ads-fields search` |
 | `geoTargetConstants.suggest` | `googleads geo-target-constants suggest` |
-| `v25.listPlannableLocations` | `googleads list-plannable-locations` |
+| `listPlannableLocations` | `googleads list-plannable-locations` |
 
 A checked-in override table puts the three methods almost all work goes through at the top, and
 resolves the one collision the rule produces on v25:
