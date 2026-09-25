@@ -78,14 +78,25 @@ func (a *app) buildRequest(cmd *cobra.Command, meth *manifest.Method, args []str
 		}
 		req.Body = body
 	}
-	if v := flagString(cmd, "login-customer-id"); v != "" {
-		id, err := config.NormalizeCustomerID(v)
-		if err != nil {
-			return nil, api.Usagef("--login-customer-id: %v", err)
-		}
-		a.client.LoginCustomerID = id
+	if err := a.applyLoginCustomerID(cmd); err != nil {
+		return nil, err
 	}
 	return req, nil
+}
+
+// applyLoginCustomerID lets --login-customer-id override the configured
+// manager account for this call.
+func (a *app) applyLoginCustomerID(cmd *cobra.Command) error {
+	v := flagString(cmd, "login-customer-id")
+	if v == "" {
+		return nil
+	}
+	id, err := config.NormalizeCustomerID(v)
+	if err != nil {
+		return api.Usagef("--login-customer-id: %v", err)
+	}
+	a.client.LoginCustomerID = id
+	return nil
 }
 
 // customerID resolves the customer: the flag, else the environment or the

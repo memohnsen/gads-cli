@@ -28,7 +28,7 @@ func (a *app) newRoot() *cobra.Command {
 	pf.String("output", "", "write the response body to a file instead of stdout")
 	pf.String("customer-id", "", "customer to act on, e.g. 123-456-7890 (default: GOOGLE_ADS_CUSTOMER_ID or the config file)")
 	pf.String("login-customer-id", "", "manager account the access goes through; sets the login-customer-id header")
-	root.AddCommand(a.versionCommand())
+	root.AddCommand(a.versionCommand(), a.commandsCommand(), a.schemaCommand(), a.apiCommand())
 	a.addGeneratedCommands(root)
 	return root
 }
