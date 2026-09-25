@@ -77,8 +77,35 @@ func (c *Client) logf(format string, a ...any) {
 	}
 }
 
+// methodOverrideHeaders make some servers treat a request as another method,
+// so a GET could be applied as a POST the guard never classified.
+var methodOverrideHeaders = []string{"x-http-method-override", "x-http-method", "x-method-override"}
+
+// headerIs compares header names the way proxies may: case-insensitively,
+// with "_" and "-" as the same character.
+func headerIs(k, name string) bool { return strings.EqualFold(strings.ReplaceAll(k, "_", "-"), name) }
+
+// shape rejects a request that could change something the guard never saw:
+// a body on a method that has none, or a non-GET call without a risk class.
+func (r Request) shape() *Error {
+	method := strings.ToUpper(r.Method)
+	if method == "" {
+		method = http.MethodGet // what net/http sends for an empty method
+	}
+	if r.Body != nil && (method == http.MethodGet || method == http.MethodDelete) {
+		return Usagef("refusing to send a request body with %s %s: %s takes no body, so the guard never inspects one", method, r.Path, method)
+	}
+	if method != http.MethodGet && r.Risk == "" {
+		return Usagef("refusing to send %s %s: no risk class was assigned, so the guard has not checked it", method, r.Path)
+	}
+	return nil
+}
+
 // guard rejects a request locally, before anything is sent.
 func (c *Client) guard(r Request) *Error {
+	if err := r.shape(); err != nil {
+		return err
+	}
 	if c.TokenSource == nil {
 		return Usagef("no service-account key: set GOOGLE_ADS_JSON_KEY_FILE_PATH, store one with `googleads config set service-account-key < key.json`, or run `googleads init`")
 	}
@@ -102,8 +129,13 @@ func (c *Client) guard(r Request) *Error {
 		}
 	}
 	for k := range r.Headers {
-		if strings.EqualFold(strings.ReplaceAll(k, "_", "-"), "developer-token") {
+		if headerIs(k, "developer-token") {
 			return Usagef("refusing to send a developer-token header: googleads authenticates with a service account only")
+		}
+		for _, name := range methodOverrideHeaders {
+			if headerIs(k, name) {
+				return Usagef("refusing to send the %s header: a method-override header could apply %s %s as another method the guard never checked", k, r.Method, r.Path)
+			}
 		}
 	}
 	return nil

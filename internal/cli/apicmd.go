@@ -26,8 +26,11 @@ func (a *app) apiCommand() *cobra.Command {
 			"for example v25/customers/1234567890/googleAds:search, without a query string (use --query k=v).\n\n" +
 			"A path that matches a known method, in any API version, inherits its risk class, the payload\n" +
 			"check, the budget cap and the block list. An unmatched POST, PUT, PATCH or DELETE is admin-class\n" +
-			"and needs --force. Read-only mode allows GET and read-class methods. Authorization and the\n" +
-			"credential query parameters access_token, oauth_token and key cannot be set.\n\n" +
+			"and needs --force. Read-only mode allows GET and read-class methods. Authorization, a\n" +
+			"developer-token header, the method-override headers (X-HTTP-Method-Override, X-HTTP-Method,\n" +
+			"X-Method-Override) and the credential query parameters access_token, oauth_token and key\n" +
+			"cannot be set. GET and DELETE take no --data. Each path segment must be non-empty and must not\n" +
+			"be \".\" or \"..\" or contain %, whitespace or a backslash.\n\n" +
 			"The path carries the customer ID, so api does not use --customer-id.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -38,6 +41,12 @@ func (a *app) apiCommand() *cobra.Command {
 			path := strings.TrimLeft(args[1], "/")
 			if path == "" || strings.ContainsAny(path, "?#") {
 				return api.Usagef("path must be relative, e.g. v25/customers/1234567890/googleAds:search, with no query string (use --query k=v)")
+			}
+			// Before Find: a spelling Find does not recognise, such as %3A
+			// for ":" or a ".." segment, would otherwise go out as an
+			// unmatched call that the payload check never sees.
+			if err := checkPathSegments("path", path); err != nil {
+				return err
 			}
 			q := url.Values{}
 			for _, kv := range queries {

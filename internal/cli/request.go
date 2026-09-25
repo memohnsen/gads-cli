@@ -119,17 +119,29 @@ func (a *app) customerID(cmd *cobra.Command) (string, error) {
 // it: no query or fragment characters, no empty, "." or ".." segments, and a
 // match against the Discovery pattern.
 func validatePathValue(p manifest.Param, v string) error {
-	if v == "" || unsafePath.MatchString(v) {
-		return api.Usagef("%s %q contains characters that cannot go into a URL path", p.Name, v)
-	}
-	for _, seg := range strings.Split(v, "/") {
-		if seg == "" || seg == "." || seg == ".." {
-			return api.Usagef(`%s %q has an empty, "." or ".." segment`, p.Name, v)
-		}
+	if err := checkPathSegments(p.Name, v); err != nil {
+		return err
 	}
 	if p.Pattern != "" {
 		if re, err := regexp.Compile(p.Pattern); err == nil && !re.MatchString(v) {
 			return api.Usagef("%s %q does not have the expected form %s", p.Name, v, p.Pattern)
+		}
+	}
+	return nil
+}
+
+// checkPathSegments refuses a path, or part of one, that the server could
+// read differently from the literal string: a query or fragment character,
+// a percent escape, whitespace, a backslash, or an empty, "." or ".." segment.
+// Method matching compares the literal string, so each of these could turn a
+// known method into an unmatched, uninspected call.
+func checkPathSegments(what, v string) error {
+	if v == "" || unsafePath.MatchString(v) {
+		return api.Usagef("%s %q contains characters that cannot go into a URL path", what, v)
+	}
+	for _, seg := range strings.Split(v, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return api.Usagef(`%s %q has an empty, "." or ".." segment`, what, v)
 		}
 	}
 	return nil

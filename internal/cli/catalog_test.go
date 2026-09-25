@@ -23,7 +23,7 @@ func TestCommandsJSON(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &cat); err != nil {
 		t.Fatal(err)
 	}
-	if cat.SchemaVersion != 1 || cat.APIVersion != "v25" || cat.DiscoveryRevision != "20260923" || len(cat.Commands) != 6 {
+	if cat.SchemaVersion != 1 || cat.APIVersion != "v25" || cat.DiscoveryRevision != "20260923" || len(cat.Commands) != 7 {
 		t.Fatalf("%+v", cat)
 	}
 	by := map[string]map[string]any{}

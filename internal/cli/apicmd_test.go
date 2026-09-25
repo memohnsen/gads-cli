@@ -119,3 +119,80 @@ func TestAPILoginCustomerIDFlagSetsHeader(t *testing.T) {
 		t.Fatalf("bad id: exit %d %s", code, errb.String())
 	}
 }
+
+const hugeBudget = `{"operations":[{"create":{"amountMicros":"999999999999"}}]}`
+
+// The review's repro: a GET that matches no method carried a budget body and
+// a method-override header past read-only mode, the cap and --force.
+func TestAPIReadOnlyGETWithOverrideAndBudgetBody(t *testing.T) {
+	srv := newFakeServer(t, reply(`{}`))
+	a, _, errb := testApp(t, srv, config.Resolved{ReadOnly: true})
+	code := a.run([]string{"api", "GET", "v25/customers/1234567890/campaignBudgets:mutate",
+		"--header", "X-HTTP-Method-Override: POST", "--data", hugeBudget})
+	if code != 2 || srv.hits.Load() != 0 {
+		t.Fatalf("exit %d, %d hits: %s", code, srv.hits.Load(), errb.String())
+	}
+}
+
+func TestAPIMethodOverrideHeadersRefused(t *testing.T) {
+	srv := newFakeServer(t, reply(`{}`))
+	for _, h := range []string{
+		"X-HTTP-Method-Override: POST", "x-http-method-override: POST", "X_HTTP_Method_Override: POST",
+		"X-HTTP-Method: POST", "X_HTTP_METHOD: POST", "X-Method-Override: POST", "x_method_override: DELETE",
+	} {
+		a, _, errb := testApp(t, srv, config.Resolved{})
+		code := a.run([]string{"api", "GET", "v25/customers:listAccessibleCustomers", "--header", h})
+		if code != 2 || !strings.Contains(errJSON(t, errb)["error"].(string), "method-override") {
+			t.Errorf("%q: exit %d %s", h, code, errb.String())
+		}
+	}
+	if n := srv.hits.Load(); n != 0 {
+		t.Fatalf("%d requests reached the server", n)
+	}
+}
+
+func TestAPIGETWithDataRefused(t *testing.T) {
+	srv := newFakeServer(t, reply(`{}`))
+	for _, method := range []string{"GET", "DELETE"} {
+		a, _, errb := testApp(t, srv, config.Resolved{BudgetCapMicros: 1_000_000_000_000})
+		code := a.run([]string{"api", method, "v25/customers/1234567890/anything", "--data", hugeBudget, "--force"})
+		if code != 2 || !strings.Contains(errJSON(t, errb)["error"].(string), "body") {
+			t.Errorf("%s: exit %d %s", method, code, errb.String())
+		}
+	}
+	if n := srv.hits.Load(); n != 0 {
+		t.Fatalf("%d requests reached the server", n)
+	}
+}
+
+// Path spellings that do not match the budget method literally must not go
+// out as an uninspected admin call, even with --force and no cap.
+func TestAPIPathVariantsRefused(t *testing.T) {
+	srv := newFakeServer(t, reply(`{}`))
+	for _, p := range []string{
+		"v25/customers/1234567890/campaignBudgets%3Amutate",
+		"v25/customers/x/../1234567890/campaignBudgets:mutate",
+		"v25/customers/1234567890/./campaignBudgets:mutate",
+		"v25//customers/1234567890/campaignBudgets:mutate",
+		"v25/customers/1234567890/campaignBudgets:mutate/",
+		"./v25/customers/1234567890/campaignBudgets:mutate",
+		"v25/customers/1234567890/campaign Budgets:mutate",
+		"v25/customers/1234567890/campaignBudgets:mutate\t",
+		`v25/customers/1234567890\campaignBudgets:mutate`,
+	} {
+		a, _, errb := testApp(t, srv, config.Resolved{})
+		code := a.run([]string{"api", "POST", p, "--data", hugeBudget, "--force"})
+		if code != 2 || errJSON(t, errb)["kind"] != "usage" {
+			t.Errorf("%q: exit %d %s", p, code, errb.String())
+		}
+	}
+	if n := srv.hits.Load(); n != 0 {
+		t.Fatalf("%d requests reached the server", n)
+	}
+	// Control: the canonical path is matched and meets the cap.
+	a, _, errb := testApp(t, srv, config.Resolved{})
+	code := a.run([]string{"api", "POST", "v25/customers/1234567890/campaignBudgets:mutate", "--data", hugeBudget, "--force"})
+	if code != 2 || !strings.Contains(errb.String(), "no budget cap") || srv.hits.Load() != 0 {
+		t.Fatalf("canonical path: exit %d %s", code, errb.String())
+	}
+}

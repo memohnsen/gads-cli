@@ -259,3 +259,68 @@ func TestCancelledDuringRetryWaitStops(t *testing.T) {
 		}
 	}
 }
+
+// countingClient is a client whose server counts the requests that reach it.
+func countingClient(t *testing.T) (*Client, *int32) {
+	t.Helper()
+	var hits int32
+	c, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Write([]byte(`{}`))
+	})
+	return c, &hits
+}
+
+func TestDoRefusesMethodOverrideHeaders(t *testing.T) {
+	c, hits := countingClient(t)
+	for _, h := range []string{
+		"X-HTTP-Method-Override", "x-http-method-override", "X_HTTP_METHOD_OVERRIDE",
+		"X-HTTP-Method", "x_http_method", "X-Method-Override", "x_method-override",
+	} {
+		r := Request{Method: "GET", Path: "v25/customers:listAccessibleCustomers", Risk: manifest.RiskRead,
+			Headers: http.Header{h: {"POST"}}}
+		_, err := c.Do(context.Background(), r)
+		if e := asErr(t, err); e.Kind != KindUsage || !strings.Contains(e.Message, "method-override") {
+			t.Errorf("%s: %+v", h, e)
+		}
+	}
+	if n := atomic.LoadInt32(hits); n != 0 {
+		t.Fatalf("%d requests reached the server", n)
+	}
+}
+
+func TestDoRefusesBodyOnGetAndDelete(t *testing.T) {
+	c, hits := countingClient(t)
+	for _, method := range []string{"GET", "DELETE", "get"} {
+		r := Request{Method: method, Path: "v25/customers/1234567890/campaignBudgets:mutate", Risk: manifest.RiskRead,
+			Body: []byte(`{"operations":[{"create":{"amountMicros":"999999999999"}}]}`)}
+		_, err := c.Do(context.Background(), r)
+		if e := asErr(t, err); e.Kind != KindUsage || !strings.Contains(e.Message, "body") {
+			t.Errorf("%s: %+v", method, e)
+		}
+	}
+	if n := atomic.LoadInt32(hits); n != 0 {
+		t.Fatalf("%d requests reached the server", n)
+	}
+}
+
+func TestDoRefusesUnclassifiedNonGET(t *testing.T) {
+	c, hits := countingClient(t)
+	for _, method := range []string{"POST", "PUT", "PATCH", "DELETE"} {
+		r := Request{Method: method, Path: "v25/customers/1234567890/campaignBudgets:mutate"}
+		if method != "DELETE" {
+			r.Body = []byte(`{"operations":[{"create":{"amountMicros":"999999999999"}}]}`)
+		}
+		_, err := c.Do(context.Background(), r)
+		if e := asErr(t, err); e.Kind != KindUsage || !strings.Contains(e.Message, "risk class") {
+			t.Errorf("%s: %+v", method, e)
+		}
+	}
+	if n := atomic.LoadInt32(hits); n != 0 {
+		t.Fatalf("%d requests reached the server", n)
+	}
+	// A GET needs no class: it cannot carry a body, so it cannot change anything.
+	if _, err := c.Do(context.Background(), Request{Method: "GET", Path: "v25/customers:listAccessibleCustomers"}); err != nil {
+		t.Fatal(err)
+	}
+}
