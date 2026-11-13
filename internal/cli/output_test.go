@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/config"
 )
 
 // A path that cannot be written is caught before the request, so usage

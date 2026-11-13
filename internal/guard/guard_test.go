@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 const cap30 = 30000000

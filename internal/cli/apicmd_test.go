@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/config"
 )
 
 func TestAPIMatchedPathInheritsTheGuard(t *testing.T) {

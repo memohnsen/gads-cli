@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 func TestCommandsJSON(t *testing.T) {

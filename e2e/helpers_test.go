@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -29,7 +30,7 @@ func buildBinary(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	out, err := exec.Command("go", "build", "-o", bin, "github.com/wir-drei-digital/google-ads-cli/cmd/googleads").CombinedOutput()
+	out, err := exec.Command("go", "build", "-o", bin, "github.com/memohnsen/gads-cli/cmd/googleads").CombinedOutput()
 	if err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
@@ -99,6 +100,8 @@ func writeKeyFile(t *testing.T) string {
 	return p
 }
 
+var versionSeg = regexp.MustCompile(`^/v[0-9]+/`)
+
 // fakeGoogle is one server for the token endpoint and the API.
 type fakeGoogle struct {
 	*httptest.Server
@@ -122,12 +125,14 @@ func newFakeGoogle(t *testing.T) *fakeGoogle {
 			w.Write([]byte(`{"error":{"code":401,"message":"unauthenticated","status":"UNAUTHENTICATED"}}`))
 			return
 		}
-		switch r.URL.Path {
-		case "/v25/customers:listAccessibleCustomers":
+		// Routes ignore the API version segment, so the smoke test follows
+		// whatever version the embedded manifest targets.
+		switch versionSeg.ReplaceAllString(r.URL.Path, "/") {
+		case "/customers:listAccessibleCustomers":
 			w.Write([]byte(`{"resourceNames":["customers/1234567890"]}`))
-		case "/v25/customers/1234567890/googleAds:search":
+		case "/customers/1234567890/googleAds:search":
 			w.Write([]byte(`{"results":[{"customer":{"resourceName":"customers/1234567890","id":"1234567890"}}]}`))
-		case "/v25/customers/1234567890/googleAds:mutate":
+		case "/customers/1234567890/googleAds:mutate":
 			g.mutates.Add(1)
 			g.mu.Lock()
 			g.lastBody = string(b)

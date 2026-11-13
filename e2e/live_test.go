@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/config"
 )
 
 // liveCampaign is a complete minimal Search campaign built with temporary

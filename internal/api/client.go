@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 // Client performs API requests. BaseURL and TokenSource are required;

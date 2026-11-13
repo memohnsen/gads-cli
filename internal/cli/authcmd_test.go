@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/config"
 )
 
 // fakeGoogle serves a token endpoint and the two calls init makes.

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 // cleanDoc flattens a description into one plain line. pflag reads a

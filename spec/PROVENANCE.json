@@ -1,8 +1,8 @@
 {
-  "source_url": "https://googleads.googleapis.com/$discovery/rest?version=v25",
-  "retrieved_at": "2026-09-25T11:15:57Z",
-  "sha256": "6c0505c567b12c8f79a2441751d78dd66a599b53015d709c3b0f52dc0d596689",
-  "revision": "20260923",
-  "methods": 175,
-  "schemas": 1489
+  "source_url": "https://googleads.googleapis.com/$discovery/rest?version=v26",
+  "retrieved_at": "2026-11-13T18:26:30Z",
+  "sha256": "f37176fd7ff7022bf3a768e276ede8af5bdef5cc54779c545da51f14f79c40bc",
+  "revision": "20261110",
+  "methods": 177,
+  "schemas": 1519
 }

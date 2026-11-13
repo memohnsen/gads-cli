@@ -16,7 +16,7 @@ func TestSmoke(t *testing.T) {
 
 	t.Run("version", func(t *testing.T) {
 		out, _, code := run(t, bin, env, "", "version")
-		if code != 0 || !strings.Contains(out, "Google Ads API v25") {
+		if code != 0 || !strings.Contains(out, "Google Ads API v26") {
 			t.Fatalf("exit %d out %q", code, out)
 		}
 	})

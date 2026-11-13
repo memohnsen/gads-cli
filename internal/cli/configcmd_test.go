@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/config"
 )
 
 // isolate points every per-user directory at a temp dir, so the tests never

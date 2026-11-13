@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/api"
 )
 
 var (

@@ -8,9 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 // encode returns the manifest's canonical JSON and its gzipped form.
@@ -34,7 +35,7 @@ func encode(m *manifest.Manifest) (raw, gz []byte, err error) {
 }
 
 func main() {
-	spec := flag.String("spec", "spec/googleads-v25.discovery.json", "path to the vendored Discovery document")
+	spec := flag.String("spec", "", "path to the vendored Discovery document (default: the one spec/googleads-v*.discovery.json)")
 	overrides := flag.String("overrides", "tools/genmanifest/overrides.json", "path to the naming override table")
 	classifications := flag.String("classifications", "tools/genmanifest/classifications.json", "path to the reviewed risk table")
 	out := flag.String("out", "internal/manifest/manifest.json.gz", "path of the generated manifest")
@@ -42,6 +43,14 @@ func main() {
 	writeProposals := flag.Bool("write-proposals", false, "write classifications.proposed.json for review and exit")
 	flag.Parse()
 
+	if *spec == "" {
+		p, err := VendoredSpec("spec")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		*spec = p
+	}
 	m, proposals, err := Build(*spec, *overrides, *classifications)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -111,4 +120,18 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("wrote %s: %d methods, %d bytes gz\n", *out, len(m.Methods), len(gz))
+}
+
+// VendoredSpec returns the one Discovery document vendored in dir. The repo
+// targets a single API major version at a time, so finding none or several
+// is an error: `make update-spec VERSION=vNN` replaces the old document.
+func VendoredSpec(dir string) (string, error) {
+	hits, err := filepath.Glob(filepath.Join(dir, "googleads-v*.discovery.json"))
+	if err != nil {
+		return "", err
+	}
+	if len(hits) != 1 {
+		return "", fmt.Errorf("want exactly one %s/googleads-v*.discovery.json, found %d: %v", dir, len(hits), hits)
+	}
+	return hits[0], nil
 }

@@ -3,7 +3,7 @@ package main
 import (
 	"strings"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 // markers are the prefixes Google puts at the start of descriptions. The

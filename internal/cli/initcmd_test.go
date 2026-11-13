@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/config"
 )
 
 type fakePrompter struct{ answers []string }

@@ -110,8 +110,19 @@ func run(client *http.Client, base, version, outDir string, now time.Time, minMe
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return Provenance{}, err
 	}
-	if err := os.WriteFile(filepath.Join(outDir, "googleads-"+version+".discovery.json"), raw, 0o644); err != nil {
+	target := filepath.Join(outDir, "googleads-"+version+".discovery.json")
+	if err := os.WriteFile(target, raw, 0o644); err != nil {
 		return Provenance{}, err
+	}
+	// One major version at a time: the generator reads the single vendored
+	// document, so the previous version's document goes.
+	old, _ := filepath.Glob(filepath.Join(outDir, "googleads-v*.discovery.json"))
+	for _, p := range old {
+		if p != target {
+			if err := os.Remove(p); err != nil {
+				return Provenance{}, err
+			}
+		}
 	}
 	pj, err := json.MarshalIndent(prov, "", "  ")
 	if err != nil {
@@ -124,7 +135,7 @@ func run(client *http.Client, base, version, outDir string, now time.Time, minMe
 }
 
 func main() {
-	version := flag.String("version", "v25", "Google Ads API version to fetch")
+	version := flag.String("version", "v26", "Google Ads API version to fetch")
 	base := flag.String("base", "https://googleads.googleapis.com", "Discovery host")
 	outDir := flag.String("out", "spec", "output directory")
 	flag.Parse()

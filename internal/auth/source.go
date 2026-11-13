@@ -14,7 +14,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/jwt"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/api"
 )
 
 // Source mints and caches access tokens for one key.

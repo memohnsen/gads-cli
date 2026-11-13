@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 func testClient(t *testing.T, h http.HandlerFunc) (*Client, *[]time.Duration) {

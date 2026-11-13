@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 // runAll follows page tokens and writes ONE JSON array of the merged rows.

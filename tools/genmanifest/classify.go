@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 // riskClasses are the only classes the CLI understands. A typo in
@@ -34,7 +34,9 @@ func set(ids ...string) map[string]bool {
 var (
 	proposeSpend = set("customers.experiments.promoteExperiment", "customers.experiments.graduateExperiment",
 		"customers.experiments.scheduleExperiment", "customers.campaignDrafts.promote", "customers.recommendations.apply",
-		"customers.recommendationSubscriptions.mutateRecommendationSubscription", "customers.reservations.bookCampaigns")
+		"customers.recommendationSubscriptions.mutateRecommendationSubscription", "customers.reservations.bookCampaigns",
+		// v26: account-wide default networks for budgets decide where every budget spends.
+		"customers.customerBudgetNetworkSettings.mutate")
 	proposeDelete = set("customers.operations.delete", "customers.adGroupAds.removeAutomaticallyCreatedAssets",
 		"customers.removeCampaignAutomaticallyCreatedAsset", "customers.youTubeVideoUploads.remove")
 	proposeWrite = set("customers.recommendations.dismiss", "customers.experiments.endExperiment", "customers.operations.cancel",
@@ -42,7 +44,7 @@ var (
 		"customers.youTubeVideoUploads.update")
 	adminMutateResources = set("customerUserAccesses", "customerUserAccessInvitations", "customerClientLinks",
 		"customerManagerLinks", "billingSetups", "accountBudgetProposals", "accountLinks", "batchJobs")
-	readVerb   = regexp.MustCompile(`^(search|get|list|generate|suggest|fetch|quote|wait)`)
+	readVerb   = regexp.MustCompile(`^(search|get|list|generate|suggest|fetch|quote|wait|check)`)
 	adminWords = regexp.MustCompile(`(?i)(upload|link|invitation|offlineUserData|batchJobs|identityVerification|incentive|leadConversation|leadFeedback|multiPartyAuth|createCustomerClient)`)
 )
 

@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 // testManifest is a small hand-built manifest with every shape the CLI handles.

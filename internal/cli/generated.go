@@ -6,9 +6,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
-	"github.com/wir-drei-digital/google-ads-cli/internal/guard"
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/guard"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 // flagName maps a camelCase API parameter to a kebab-case flag:

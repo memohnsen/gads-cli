@@ -1,4 +1,4 @@
-module github.com/wir-drei-digital/google-ads-cli
+module github.com/memohnsen/gads-cli
 
 go 1.26
 

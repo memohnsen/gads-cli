@@ -11,7 +11,7 @@ import (
 var Version = "dev"
 
 // resolveVersion prefers the linker-set version. A build without one, such
-// as `go install github.com/wir-drei-digital/google-ads-cli/cmd/googleads@v0.1.0`,
+// as `go install github.com/memohnsen/gads-cli/cmd/googleads@v0.1.0`,
 // falls back to the module version Go recorded. A checkout build records a
 // VCS pseudo-version (Go 1.24 and later), or "(devel)", which stays "dev".
 func resolveVersion(linker string, info *debug.BuildInfo, ok bool) string {
