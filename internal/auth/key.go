@@ -1,6 +1,9 @@
-// Package auth turns a Google Cloud service-account key into access tokens
-// for the Google Ads API: a signed JWT exchanged at Google's token endpoint
-// (RFC 7523), cached on disk until shortly before it expires.
+// Package auth turns a credential into access tokens for the Google Ads API
+// and caches them on disk until shortly before they expire. A credential is
+// either a Google Cloud service-account key (a signed JWT exchanged at
+// Google's token endpoint, RFC 7523) or an OAuth user credential in Google's
+// authorized_user format (a refresh token, RFC 6749 section 6), which
+// `googleads auth login` creates with the installed-app loopback flow.
 package auth
 
 import (
@@ -38,7 +41,10 @@ func ParseKey(raw []byte) (*Key, error) {
 	}
 	for _, kind := range []string{"installed", "web"} {
 		if _, ok := probe[kind]; ok {
-			return nil, fmt.Errorf("this is an OAuth client file (%s app), not a service-account key: create a key under IAM & Admin, Service accounts, Keys", kind)
+			if kind == "installed" {
+				return nil, errors.New("this is an OAuth client file (installed app), not a credential: turn it into a user credential with `googleads auth login --client-file <file>`")
+			}
+			return nil, fmt.Errorf("this is an OAuth client file (%s app), not a service-account key: create a key under IAM & Admin, Service accounts, Keys, or a Desktop app client for `googleads auth login`", kind)
 		}
 	}
 	var k Key
@@ -48,7 +54,7 @@ func ParseKey(raw []byte) (*Key, error) {
 	switch k.Type {
 	case "service_account":
 	case "authorized_user":
-		return nil, errors.New("this is a user credential (authorized_user), not a service-account key")
+		return nil, errors.New("this is a user credential (authorized_user), not a service-account key: use it through `googleads config set op-ref` or GOOGLE_ADS_JSON_KEY_FILE_PATH, or create one with `googleads auth login`")
 	case "":
 		return nil, errors.New(`not a service-account key: the file has no "type" field`)
 	default:

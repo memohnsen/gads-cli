@@ -37,7 +37,8 @@ type auditEntry struct {
 	ConfirmSpend    bool              `json:"confirm_spend"`
 	ForceAlias      bool              `json:"force_alias,omitempty"`
 	ValidateOnly    bool              `json:"validate_only"`
-	Credential      string            `json:"credential,omitempty"` // reader or writer
+	Credential      string            `json:"credential,omitempty"`      // reader or writer
+	CredentialType  string            `json:"credential_type,omitempty"` // service_account or authorized_user
 	CredentialEmail string            `json:"credential_email,omitempty"`
 	Operations      []guard.OpSummary `json:"operations,omitempty"`
 	BudgetMicros    string            `json:"budget_micros_set,omitempty"`

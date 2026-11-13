@@ -21,26 +21,32 @@ var OpBinary = "op"
 // opTimeout bounds `op read`, which may wait on a desktop-app unlock.
 const opTimeout = 60 * time.Second
 
-// maxKeyBytes bounds a key read from any source.
+// maxKeyBytes bounds a credential read from any source.
 const maxKeyBytes = 1 << 20
 
-// LoadKey reads and validates the service-account key of one credential.
-// The key never passes through a command line or an error message: op
-// writes it to a pipe this process reads, and a file is read directly after
-// its permissions are checked. Every error is a usage *api.Error.
-func LoadKey(ctx context.Context, c config.Credential) (*Key, error) {
-	var raw []byte
-	var err error
-	switch c.Source {
-	case config.SourceOp:
-		raw, err = readOp(ctx, c.OpRef)
-	case config.SourceEnv, config.SourceFile:
-		raw, err = readPrivateFile(c.Path)
-	default:
-		return nil, api.Usagef("no %s service-account key is configured; %s", c.Role, SetupHint(c.Role))
-	}
+// LoadCredential reads and validates one role's credential: a
+// service-account key or an authorized_user credential. The secret never
+// passes through a command line or an error message: op writes it to a pipe
+// this process reads, and a file is read directly after its permissions are
+// checked. Every error is a usage *api.Error.
+func LoadCredential(ctx context.Context, c config.Credential) (*Credential, error) {
+	raw, err := readSource(ctx, c)
 	if err != nil {
-		return nil, api.Usagef("%s key (%s): %v", c.Role, describeSource(c), err)
+		return nil, err
+	}
+	cred, err := ParseCredential(raw)
+	if err != nil {
+		return nil, api.Usagef("%s credential (%s): %v", c.Role, describeSource(c), err)
+	}
+	return cred, nil
+}
+
+// LoadKey reads and validates a role's credential and requires it to be a
+// service-account key.
+func LoadKey(ctx context.Context, c config.Credential) (*Key, error) {
+	raw, err := readSource(ctx, c)
+	if err != nil {
+		return nil, err
 	}
 	k, err := ParseKey(raw)
 	if err != nil {
@@ -49,16 +55,64 @@ func LoadKey(ctx context.Context, c config.Credential) (*Key, error) {
 	return k, nil
 }
 
-// SetupHint names the ways to configure a role's key.
+func readSource(ctx context.Context, c config.Credential) ([]byte, error) {
+	var raw []byte
+	var err error
+	switch c.Source {
+	case config.SourceOp:
+		raw, err = readOp(ctx, c.OpRef)
+	case config.SourceEnv, config.SourceFile:
+		raw, err = readPrivateFile(c.Path)
+	default:
+		return nil, api.Usagef("no %s credential is configured; %s", c.Role, SetupHint(c.Role))
+	}
+	if err != nil {
+		return nil, api.Usagef("%s credential (%s): %v", c.Role, describeSource(c), err)
+	}
+	return raw, nil
+}
+
+// LoadClient reads an OAuth client file for `auth login`, from a 1Password
+// reference or from a file that, like a credential, must be chmod 600: its
+// client secret is half of what a refresh token needs.
+func LoadClient(ctx context.Context, path, opRef string) (*OAuthClient, error) {
+	var raw []byte
+	var err error
+	where := path
+	switch {
+	case opRef != "":
+		where = "1Password " + opRef
+		if !strings.HasPrefix(opRef, "op://") {
+			return nil, api.Usagef("--client-op-ref wants a secret reference such as op://<vault>/<item>/<field>, got %q", opRef)
+		}
+		raw, err = readOp(ctx, opRef)
+	case path != "":
+		raw, err = readPrivateFile(path)
+	default:
+		return nil, api.Usagef("auth login needs the OAuth client: --client-file <client.json> (chmod 600) or --client-op-ref op://<vault>/<item>/<field>")
+	}
+	if err != nil {
+		return nil, api.Usagef("OAuth client (%s): %v", where, err)
+	}
+	cl, err := ParseClientFile(raw)
+	if err != nil {
+		return nil, api.Usagef("OAuth client (%s): %v", where, err)
+	}
+	return cl, nil
+}
+
+// SetupHint names the ways to configure a role's credential.
 func SetupHint(role string) string {
 	if role == config.RoleWriter {
-		return "set op_writer_ref with `googleads config set op-ref --role writer op://<vault>/<item>/<field>`, " +
-			"point GOOGLE_ADS_WRITE_JSON_KEY_FILE_PATH at a chmod 600 key file, " +
-			"or store one with `googleads config set service-account-key --role writer < key.json`"
+		return "run `googleads auth login --role writer --client-file <client.json>` (user OAuth), " +
+			"set op_writer_ref with `googleads config set op-ref --role writer op://<vault>/<item>/<field>`, " +
+			"point GOOGLE_ADS_WRITE_JSON_KEY_FILE_PATH at a chmod 600 credential file, " +
+			"or store a service-account key with `googleads config set service-account-key --role writer < key.json`"
 	}
-	return "set op_reader_ref with `googleads config set op-ref op://<vault>/<item>/<field>`, " +
-		"point GOOGLE_ADS_JSON_KEY_FILE_PATH at a chmod 600 key file, " +
-		"or store one with `googleads config set service-account-key < key.json`"
+	return "run `googleads auth login --client-file <client.json>` (user OAuth), " +
+		"set op_reader_ref with `googleads config set op-ref op://<vault>/<item>/<field>`, " +
+		"point GOOGLE_ADS_JSON_KEY_FILE_PATH at a chmod 600 credential file, " +
+		"or store a service-account key with `googleads config set service-account-key < key.json`"
 }
 
 func describeSource(c config.Credential) string {
@@ -85,7 +139,7 @@ func readPrivateFile(path string) ([]byte, error) {
 		return nil, err
 	}
 	if len(raw) > maxKeyBytes {
-		return nil, errors.New("file is larger than 1 MB; not a service-account key")
+		return nil, errors.New("file is larger than 1 MB; not a credential")
 	}
 	return raw, nil
 }
@@ -114,7 +168,7 @@ func readOp(ctx context.Context, ref string) ([]byte, error) {
 		return nil, fmt.Errorf("op read failed: %s", msg)
 	}
 	if stdout.Len() > maxKeyBytes {
-		return nil, errors.New("op returned more than 1 MB; not a service-account key")
+		return nil, errors.New("op returned more than 1 MB; not a credential")
 	}
 	return stdout.Bytes(), nil
 }

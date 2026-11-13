@@ -26,7 +26,8 @@ func (a *app) initCommand() *cobra.Command {
 			"Standard (writer) key file, the customer ID and a budget cap, checks the reader key against\n" +
 			"Google with two read-only calls, stores each key as a 0600 file under the config directory and\n" +
 			"saves the rest to the config file. Read-only mode stays on. Needs a terminal: agents never run\n" +
-			"it. To keep keys in 1Password instead, use `googleads config set op-ref`.",
+			"it. To keep keys in 1Password instead, use `googleads config set op-ref`; where service-account\n" +
+			"keys are unavailable, use `googleads auth login` (user OAuth) instead of init.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			isTTY := a.isTerminal
@@ -181,7 +182,7 @@ func (a *app) verify(ctx context.Context, key *auth.Key, customer string) (strin
 		return "", "", "", api.Usagef("init: this build's manifest lacks the verification methods; reinstall googleads")
 	}
 	client := *a.client
-	client.TokenSource = a.newSource(key).Token
+	client.TokenSource = a.newSource(&auth.Credential{Key: key}).Token
 	if _, err := client.Do(ctx, api.Request{Method: list.HTTPMethod, Path: list.Path, Risk: manifest.RiskRead, MethodID: list.ID}); err != nil {
 		return "", "", "", err
 	}

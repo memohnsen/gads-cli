@@ -82,8 +82,9 @@ func (a *app) configCommand() *cobra.Command {
 
 	setOp := &cobra.Command{
 		Use:   "op-ref <op://vault/item/field>",
-		Short: "Read a role's key from 1Password with `op read` (tried before any key file)",
-		Long: "Store a 1Password secret reference to a service-account key. googleads runs\n" +
+		Short: "Read a role's credential from 1Password with `op read` (tried before any file)",
+		Long: "Store a 1Password secret reference to a credential: a service-account key or a user OAuth\n" +
+			"(authorized_user) credential, as `googleads auth login --op-ref` writes. googleads runs\n" +
 			"`op read --no-newline <ref>` with stdin closed when it needs the key, so the key never sits\n" +
 			"on disk. The 1Password CLI must be signed in (desktop-app integration or\n" +
 			"OP_SERVICE_ACCOUNT_TOKEN). Example:\n" +
@@ -199,7 +200,7 @@ func (a *app) configCommand() *cobra.Command {
 
 	unset := &cobra.Command{Use: "unset", Short: "Remove a config value", Args: cobra.ArbitraryArgs, RunE: keyGroupRunE("unset")}
 	unsetKey := &cobra.Command{
-		Use: "service-account-key", Short: "Delete a role's stored key file from this machine", Args: cobra.NoArgs,
+		Use: "service-account-key", Short: "Delete a role's stored credential file (key or user OAuth) from this machine", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			role, err := roleOf(cmd)
 			if err != nil {
@@ -215,7 +216,7 @@ func (a *app) configCommand() *cobra.Command {
 			} else if err != nil {
 				return api.Usagef("%v", err)
 			}
-			fmt.Fprintf(a.stdout, "%s key file removed from this machine; it stays valid until you delete it in the Google Cloud Console (IAM & Admin, Service accounts, Keys)\n", role)
+			fmt.Fprintf(a.stdout, "%s credential file removed from this machine; it stays valid until revoked: delete a service-account key in the Google Cloud Console (IAM & Admin, Service accounts, Keys), or remove a user OAuth grant at https://myaccount.google.com/permissions\n", role)
 			return nil
 		},
 	}
