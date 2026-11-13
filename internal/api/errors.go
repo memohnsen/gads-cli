@@ -17,7 +17,7 @@ const (
 	// KindGuardrail: a safety rule refused the call before anything was
 	// sent (dry-run default, --apply/--confirm-spend gates, read-only mode,
 	// the budget cap, a required PAUSED status, a blocked method).
-	KindGuardrail = "guardrail"
+	KindGuardrail      = "guardrail"
 	KindPartialFailure = "partial_failure"
 	KindConflict       = "conflict"
 	// KindOutputFailed: the call succeeded, but its response could not be

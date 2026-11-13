@@ -19,15 +19,17 @@ const liveCampaign = `{"mutateOperations":[
 {"campaignBudgetOperation":{"create":{"resourceName":"customers/CID/campaignBudgets/-1","name":"googleads live check NAME","amountMicros":"AMOUNT","deliveryMethod":"STANDARD","explicitlyShared":false}}},
 {"campaignOperation":{"create":{"resourceName":"customers/CID/campaigns/-2","name":"googleads live check NAME",STATUS"advertisingChannelType":"SEARCH","campaignBudget":"customers/CID/campaignBudgets/-1","manualCpc":{"enhancedCpcEnabled":false},"networkSettings":{"targetGoogleSearch":true,"targetSearchNetwork":false,"targetContentNetwork":false,"targetPartnerSearchNetwork":false},"containsEuPoliticalAdvertising":"DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING"}}},
 {"campaignCriterionOperation":{"create":{"campaign":"customers/CID/campaigns/-2","location":{"geoTargetConstant":"geoTargetConstants/2756"}}}},
-{"adGroupOperation":{"create":{"resourceName":"customers/CID/adGroups/-3","name":"googleads live check","campaign":"customers/CID/campaigns/-2","type":"SEARCH_STANDARD","status":"ENABLED","cpcBidMicros":"1000000"}}},
-{"adGroupCriterionOperation":{"create":{"adGroup":"customers/CID/adGroups/-3","status":"ENABLED","keyword":{"text":"googleads live check","matchType":"EXACT"}}}},
-{"adGroupCriterionOperation":{"create":{"adGroup":"customers/CID/adGroups/-3","status":"ENABLED","keyword":{"text":"googleads live check","matchType":"PHRASE"}}}},
-{"adGroupAdOperation":{"create":{"adGroup":"customers/CID/adGroups/-3","status":"ENABLED","ad":{"finalUrls":["FINALURL"],"responsiveSearchAd":{"headlines":[{"text":"Live check headline one"},{"text":"Live check headline two"},{"text":"Live check headline three"}],"descriptions":[{"text":"First description for the googleads live check."},{"text":"Second description for the googleads live check."}]}}}}}
+{"adGroupOperation":{"create":{"resourceName":"customers/CID/adGroups/-3","name":"googleads live check","campaign":"customers/CID/campaigns/-2","type":"SEARCH_STANDARD","status":"PAUSED","cpcBidMicros":"1000000"}}},
+{"adGroupCriterionOperation":{"create":{"adGroup":"customers/CID/adGroups/-3","status":"PAUSED","keyword":{"text":"googleads live check","matchType":"EXACT"}}}},
+{"adGroupCriterionOperation":{"create":{"adGroup":"customers/CID/adGroups/-3","status":"PAUSED","keyword":{"text":"googleads live check","matchType":"PHRASE"}}}},
+{"adGroupAdOperation":{"create":{"adGroup":"customers/CID/adGroups/-3","status":"PAUSED","ad":{"finalUrls":["FINALURL"],"responsiveSearchAd":{"headlines":[{"text":"Live check headline one"},{"text":"Live check headline two"},{"text":"Live check headline three"}],"descriptions":[{"text":"First description for the googleads live check."},{"text":"Second description for the googleads live check."}]}}}}}
 ]}`
 
 // TestLive runs against a real Google Ads account with the operator's real
-// configuration and changes nothing: the campaign is sent with
-// --validate-only, and the unpaused variant is refused before it leaves.
+// configuration and changes nothing: the whole PAUSED campaign is sent with
+// --validate-only (budget creates are spend-class, so the dry run is
+// explicit), the same body without --apply is refused locally, and the
+// variant without a campaign status is refused before it leaves.
 //
 //	GOOGLE_ADS_LIVE=1 GOOGLE_ADS_LIVE_FINAL_URL=https://example.com go test ./e2e -run TestLive -v
 func TestLive(t *testing.T) {
@@ -88,8 +90,12 @@ func TestLive(t *testing.T) {
 		}
 	}
 
-	_, errOut, code = run(t, bin, env, "", "mutate", "--data", payload(false))
+	_, errOut, code = run(t, bin, env, "", "mutate", "--data", payload(true))
+	if code != 2 || !strings.Contains(errOut, "--validate-only") {
+		t.Fatalf("a budget create without --validate-only or --apply --confirm-spend must be refused locally: exit %d %s", code, errOut)
+	}
+	_, errOut, code = run(t, bin, env, "", "mutate", "--validate-only", "--data", payload(false))
 	if code != 2 || !strings.Contains(errOut, "PAUSED") {
-		t.Fatalf("an unpaused campaign must be refused locally: exit %d %s", code, errOut)
+		t.Fatalf("a campaign without a status must be refused locally: exit %d %s", code, errOut)
 	}
 }

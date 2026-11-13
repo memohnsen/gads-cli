@@ -156,4 +156,3 @@ func flatten(dec *json.Decoder, prefix string, out map[string]string, col func(s
 	}
 	return nil
 }
-

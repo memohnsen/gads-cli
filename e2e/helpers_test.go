@@ -69,6 +69,7 @@ func scrubbedEnv(t *testing.T, extra ...string) []string {
 	}
 	env = append(env, "HOME="+home, "USERPROFILE="+home,
 		"XDG_CONFIG_HOME="+filepath.Join(home, "config"), "XDG_CACHE_HOME="+filepath.Join(home, "cache"),
+		"XDG_STATE_HOME="+filepath.Join(home, "state"),
 		"AppData="+filepath.Join(home, "appdata"), "LocalAppData="+filepath.Join(home, "localappdata"))
 	return append(env, extra...)
 }
@@ -108,6 +109,7 @@ type fakeGoogle struct {
 	mutates  atomic.Int32
 	mu       sync.Mutex
 	lastBody string
+	devToken atomic.Bool // a developer-token header ever arrived
 }
 
 func newFakeGoogle(t *testing.T) *fakeGoogle {
@@ -116,6 +118,9 @@ func newFakeGoogle(t *testing.T) *fakeGoogle {
 	g.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		b, _ := io.ReadAll(r.Body)
+		if r.Header.Get("developer-token") != "" {
+			g.devToken.Store(true)
+		}
 		switch {
 		case r.URL.Path == "/token":
 			w.Write([]byte(`{"access_token":"smoke-token","expires_in":3600,"token_type":"Bearer"}`))

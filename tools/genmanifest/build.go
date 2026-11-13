@@ -39,7 +39,9 @@ func LoadOverrides(path string) (*Overrides, error) {
 type Proposal struct{ ID, HTTPMethod, Path, Proposed string }
 
 // reserved are the built-in commands no generated command may shadow.
-var reserved = set("api", "auth", "commands", "completion", "config", "help", "init", "schema", "version")
+var reserved = set("api", "auth", "commands", "completion", "config", "help", "init", "schema", "version",
+	// hand-written wrappers (internal/cli/wrappers.go)
+	"list", "get", "pause", "enable", "create", "update", "link", "unlink")
 
 // Build assembles the manifest. It collects every problem it finds and
 // reports them together, so one run shows all the work needed. Methods that

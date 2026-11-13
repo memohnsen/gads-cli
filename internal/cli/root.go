@@ -38,6 +38,7 @@ func (a *app) newRoot() *cobra.Command {
 	pf.String("login-customer-id", "", "manager account the access goes through; sets the login-customer-id header")
 	root.AddCommand(a.versionCommand(), a.commandsCommand(), a.schemaCommand(), a.apiCommand(),
 		a.configCommand(), a.authCommand(), a.initCommand())
+	root.AddCommand(a.wrapperCommands()...)
 	a.addGeneratedCommands(root)
 	return root
 }

@@ -86,7 +86,7 @@ func (a *app) apiCommand() *cobra.Command {
 			return a.execute(cmd, execSpec{
 				meth: target, unmatched: unmatched, forceRead: method == "GET",
 				canValidate: !unmatched && target.ValidateOnly,
-				req: &api.Request{Method: method, Path: path, Query: q, Body: body, MethodID: target.ID, Headers: hdr},
+				req:         &api.Request{Method: method, Path: path, Query: q, Body: body, MethodID: target.ID, Headers: hdr},
 			})
 		},
 	}
