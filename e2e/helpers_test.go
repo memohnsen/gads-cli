@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,6 +102,14 @@ func writeKeyFile(t *testing.T) string {
 	return p
 }
 
+// Fake user-OAuth secrets; SENTINEL marks them for the leak checks.
+const (
+	e2eClientID     = "123456789012-e2e.apps.googleusercontent.com"
+	e2eClientSecret = "cs-SENTINEL-e2e-secret"
+	e2eRefreshToken = "rt-SENTINEL-e2e-refresh"
+	e2eCode         = "ac-SENTINEL-e2e-code"
+)
+
 var versionSeg = regexp.MustCompile(`^/v[0-9]+/`)
 
 // fakeGoogle is one server for the token endpoint and the API.
@@ -123,7 +132,25 @@ func newFakeGoogle(t *testing.T) *fakeGoogle {
 		}
 		switch {
 		case r.URL.Path == "/token":
-			w.Write([]byte(`{"access_token":"smoke-token","expires_in":3600,"token_type":"Bearer"}`))
+			form, _ := url.ParseQuery(string(b))
+			switch form.Get("grant_type") {
+			case "authorization_code": // auth login
+				if form.Get("code") != e2eCode || form.Get("client_secret") != e2eClientSecret || form.Get("code_verifier") == "" {
+					w.WriteHeader(400)
+					w.Write([]byte(`{"error":"invalid_grant"}`))
+					return
+				}
+				fmt.Fprintf(w, `{"access_token":"smoke-token","expires_in":3600,"token_type":"Bearer","refresh_token":%q,"scope":"https://www.googleapis.com/auth/adwords"}`, e2eRefreshToken)
+			case "refresh_token": // a user OAuth credential
+				if form.Get("refresh_token") != e2eRefreshToken || form.Get("client_secret") != e2eClientSecret {
+					w.WriteHeader(400)
+					w.Write([]byte(`{"error":"invalid_grant"}`))
+					return
+				}
+				w.Write([]byte(`{"access_token":"smoke-token","expires_in":3600,"token_type":"Bearer"}`))
+			default: // a service-account assertion
+				w.Write([]byte(`{"access_token":"smoke-token","expires_in":3600,"token_type":"Bearer"}`))
+			}
 			return
 		case r.Header.Get("Authorization") != "Bearer smoke-token":
 			w.WriteHeader(401)

@@ -7,16 +7,23 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/memohnsen/gads-cli/internal/auth"
 	"github.com/memohnsen/gads-cli/internal/config"
 )
 
-// credentialStatus describes one role's key without revealing it.
+// credentialStatus describes one role's credential without revealing it.
 type credentialStatus struct {
-	Configured       bool   `json:"configured"`
-	Source           string `json:"source,omitempty"` // op, env or file
-	OpRef            string `json:"op_ref,omitempty"`
-	Path             string `json:"path,omitempty"`
-	ClientEmail      string `json:"client_email,omitempty"`
+	Configured bool   `json:"configured"`
+	Source     string `json:"source,omitempty"` // op, env or file
+	OpRef      string `json:"op_ref,omitempty"`
+	Path       string `json:"path,omitempty"`
+	// Type is service_account or authorized_user (user OAuth).
+	Type        string `json:"type,omitempty"`
+	ClientEmail string `json:"client_email,omitempty"`
+	// OAuthClient and Account describe a user credential: the start of its
+	// OAuth client ID and the account label, if the file has one.
+	OAuthClient      string `json:"oauth_client,omitempty"`
+	Account          string `json:"account,omitempty"`
 	ProjectID        string `json:"project_id,omitempty"`
 	KeyIDSuffix      string `json:"key_id_suffix,omitempty"`
 	TokenCachedUntil string `json:"token_cached_until,omitempty"`
@@ -25,7 +32,7 @@ type credentialStatus struct {
 
 // authStatus is `googleads auth status`: what is configured, never a secret.
 type authStatus struct {
-	Mode             string                      `json:"mode"` // service_account or none
+	Mode             string                      `json:"mode"` // the reader's credential type: service_account, authorized_user or none
 	APIVersion       string                      `json:"api_version"`
 	CustomerID       string                      `json:"customer_id,omitempty"`
 	CustomerOrigin   string                      `json:"customer_origin,omitempty"`
@@ -41,14 +48,16 @@ type authStatus struct {
 }
 
 func (a *app) authCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "auth", Short: "Inspect the configured credentials", RunE: groupRunE}
+	cmd := &cobra.Command{Use: "auth", Short: "Inspect the configured credentials, or create a user OAuth credential", RunE: groupRunE}
+	cmd.AddCommand(a.loginCommand())
 	cmd.AddCommand(&cobra.Command{
 		Use:   "status",
 		Short: "Show the configured credentials and limits as one line of JSON (never prints a key or token)",
-		Long: "Show the configured credentials and limits as one line of JSON. It loads each configured key\n" +
-			"(a 1Password reference is read with `op read`) to report its client email, project and the last\n" +
-			"characters of its key id; it never prints a private key or an access token, and it makes no\n" +
-			"Google Ads call.",
+		Long: "Show the configured credentials and limits as one line of JSON. It loads each configured\n" +
+			"credential (a 1Password reference is read with `op read`) to report its type and, for a service\n" +
+			"account, its client email, project and the last characters of its key id, or, for a user OAuth\n" +
+			"credential, the start of its OAuth client ID. It never prints a private key, a client secret, a\n" +
+			"refresh token or an access token, and it makes no Google Ads call.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// No HTML escaping, like every JSON output: the hints quote
@@ -88,16 +97,21 @@ func (a *app) authStatus(cmd *cobra.Command) authStatus {
 			} else {
 				hints = append(hints, "no writer key, so --apply is unavailable: "+credentialHint(role))
 			}
-		} else if key, err := a.loadKey(cmd.Context(), role); err != nil {
+		} else if cred, err := a.loadCredential(cmd.Context(), role); err != nil {
 			cs.Error = err.Error()
 			s.Missing = append(s.Missing, "valid_"+role+"_key")
 		} else {
-			cs.ClientEmail, cs.ProjectID, cs.KeyIDSuffix = key.ClientEmail, key.ProjectID, keyIDSuffix(key.PrivateKeyID)
-			if until := a.newSource(key).CachedUntil(); until.After(time.Now()) {
+			cs.Type = cred.Kind()
+			if key := cred.Key; key != nil {
+				cs.ClientEmail, cs.ProjectID, cs.KeyIDSuffix = key.ClientEmail, key.ProjectID, keyIDSuffix(key.PrivateKeyID)
+			} else {
+				cs.OAuthClient, cs.Account = auth.ClientIDSuffix(cred.User.ClientID), cred.User.Account
+			}
+			if until := a.newSource(cred).CachedUntil(); until.After(time.Now()) {
 				cs.TokenCachedUntil = until.UTC().Format(time.RFC3339)
 			}
 			if role == config.RoleReader {
-				s.Mode = "service_account"
+				s.Mode = cred.Kind()
 			}
 		}
 		s.Credentials[role] = cs

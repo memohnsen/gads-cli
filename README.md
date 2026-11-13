@@ -15,6 +15,9 @@ authenticates with a service account without a developer token. This fork adds:
 - **Account-wide budget cap**, on top of upstream's per-budget cap.
 - **Separate reader and writer credentials**, loaded from 1Password, an env-named `chmod 600` file,
   or a `0600` file under the config directory. Read-only mode is on by default.
+- **Service accounts or user OAuth.** Where an organisation policy blocks service-account keys,
+  `gads auth login` creates a user OAuth credential once (loopback flow with PKCE, browser or
+  headless) and every gate applies to it unchanged.
 - **Audit log**: one JSON line for every write attempt.
 - **First-class wrappers** (`list`, `get`, `pause`, `enable`, `create`, `update`, `link`, `unlink`)
   and CSV/table output for reports.
@@ -68,9 +71,12 @@ The CLI cannot do these for you, and it never creates Cloud or Ads resources its
       `gads search --query "SELECT campaign.id, campaign.name FROM campaign WHERE campaign.missing_eu_political_advertising_declaration = TRUE"`
 
 No developer token is used. Google retired it on 2026-09-09; access now belongs to the Cloud
-project. The CLI never sends a `developer-token` header and refuses to. If your organisation forbids
-service accounts, user OAuth is the documented fallback in Google's docs, but this CLI does not
-implement it.
+project. The CLI never sends a `developer-token` header and refuses to.
+
+If your organisation blocks service-account keys (the org policy
+`iam.managed.disableServiceAccountKeyCreation`, or the older
+`iam.disableServiceAccountKeyCreation`), skip the two service accounts and use
+[user OAuth](#user-oauth-when-service-account-keys-are-blocked) instead.
 
 ## Configuration
 
@@ -82,18 +88,23 @@ gads config set login-customer-id 111-222-3333   # only if access goes through a
 
 ### Credentials
 
-Each role (`reader`, `writer`) takes its key from the first source configured, in this order:
+A credential is either a **service-account key** or a **user OAuth credential** in Google's
+`authorized_user` format (`client_id`, `client_secret`, `refresh_token`), which
+[`gads auth login`](#user-oauth-when-service-account-keys-are-blocked) creates. Both kinds load from
+the same places. Each role (`reader`, `writer`) takes its credential from the first source
+configured, in this order:
 
 1. **1Password**: `gads config set op-ref op://<vault>/<item>/<field>` (add `--role writer` for the
    writer), or `GOOGLE_ADS_OP_READER_REF` / `GOOGLE_ADS_OP_WRITER_REF`. The CLI runs
-   `op read --no-newline <ref>` with stdin closed when it needs the key, so the key never lands on
+   `op read --no-newline <ref>` with stdin closed when it needs the credential, so it never lands on
    disk. `op` must be signed in (desktop-app integration or `OP_SERVICE_ACCOUNT_TOKEN`).
-2. **A key file named by the environment**: `GOOGLE_ADS_JSON_KEY_FILE_PATH` (reader) and
-   `GOOGLE_ADS_WRITE_JSON_KEY_FILE_PATH` (writer). The file must be `chmod 600`; a key readable by
-   group or others is refused.
-3. **A stored key file**: `gads config set service-account-key [--role writer] < key.json` reads the
-   key from stdin, checks it, and writes `<config dir>/gads/credentials/<role>.json` with mode
-   `0600` in a `0700` directory. Delete the download afterwards.
+2. **A file named by the environment**: `GOOGLE_ADS_JSON_KEY_FILE_PATH` (reader) and
+   `GOOGLE_ADS_WRITE_JSON_KEY_FILE_PATH` (writer). The file must be `chmod 600`; a credential
+   readable by group or others is refused.
+3. **A stored file**, `<config dir>/gads/credentials/<role>.json`, mode `0600` in a `0700`
+   directory: `gads config set service-account-key [--role writer] < key.json` stores a key from
+   stdin (delete the download afterwards), and `gads auth login` stores a user credential there
+   unless you give it `--op-ref`.
 
 The config file itself never holds a key. Reads and dry runs use the reader; `--apply` uses the
 writer, and fails if no writer is configured. If your account refuses `validate_only` requests
@@ -101,12 +112,72 @@ from a Read only user, run `gads config set dry-run-credential writer`; dry runs
 nothing. With only one Standard key at first, configure it for both roles and keep read-only mode on
 until you mean to write.
 
-`gads auth status` prints one line of JSON: each role's source, client email, project and the
-last characters of its key id, plus the customer, budget cap, read-only state and audit log path.
-It never prints a private key or a token, and there is no command that prints a token.
+`gads auth status` prints one line of JSON: each role's source and credential type
+(`service_account` or `authorized_user`); for a key its client email, project and the last
+characters of its key id, for a user credential the start of its OAuth client ID; plus the
+customer, budget cap, read-only state and audit log path. It never prints a private key, a client
+secret, a refresh token or an access token, and there is no command that prints a token.
 
 `gads init` is an interactive wizard for a person at a terminal that does the same as the commands
-above.
+above for service-account keys.
+
+### User OAuth (when service-account keys are blocked)
+
+`gads auth login` runs Google's installed-app flow once: it listens on `127.0.0.1`, sends a browser
+to Google's consent page for the Google Ads scope (`https://www.googleapis.com/auth/adwords`) only,
+checks the `state`, exchanges the code with PKCE, and stores the refresh token as an
+`authorized_user` credential. The credential acts with the Google Ads access of the person who
+signed in. Read-only mode, dry runs, PAUSED creates, `--apply --confirm-spend`, the budget cap and
+the audit log apply to it exactly as to a service account; the audit log records
+`credential_type: "authorized_user"`.
+
+Once, in the Cloud Console of the project that has the Google Ads API enabled:
+
+1. **OAuth consent screen** (Google Auth Platform): set it up. With a Google Workspace
+   organisation choose **Internal**. Otherwise choose **External** and add the signing-in user as a
+   test user. While an External app is in **Testing**, Google expires its refresh tokens after
+   7 days, so the CLI stops working until someone logs in again; for unattended use, publish the app
+   (**In production**) or use an Internal app. Google may show an "unverified app" warning for the
+   Google Ads scope, which you can accept for your own account.
+2. **Credentials**, Create OAuth client ID, type **Desktop app**. Download the JSON and either
+   `chmod 600` it or put it in 1Password. The CLI refuses a client file readable by group or others.
+3. The Google user who will sign in needs access to the Google Ads account (Admin > Access and
+   security). Standard is enough for `--apply`; do not grant Admin.
+
+Then, on the machine that runs the CLI:
+
+```sh
+# A machine with a browser: stores <config dir>/gads/credentials/reader.json (0600)
+gads auth login --client-file ~/client.json
+
+# Store it in 1Password instead, and point op_reader_ref at it:
+gads auth login --client-op-ref op://<vault>/<client item>/<field> \
+                --op-ref op://<vault>/<credential item>/credential
+
+# The writer role (used only with --apply) works the same way:
+gads auth login --role writer --client-file ~/client.json
+```
+
+With `--op-ref`, the credential goes to `op` on stdin as an item template (never as an argument),
+the item is created if missing (otherwise only that field is replaced), and `op_<role>_ref` is set
+in the config file. A user credential is the person's full Google Ads access, so the reader role is
+not read-only by itself: read-only mode, which stays on until a person turns it off, is what keeps
+reads read-only. If you want a hard split, sign in for the reader as a second Google user with
+**Read only** access. To use one credential for both roles, point both refs at the same item:
+`gads config set op-ref --role writer <same ref>`.
+
+**No browser on the machine** (a server, a bot box over SSH): add `--no-browser`. The CLI prints
+only the consent URL on stdout and waits. Open the URL in any browser and approve. Google then
+redirects to `http://127.0.0.1:<port>/...`, which fails to load on a different computer: copy the
+whole address from the address bar and paste it into the waiting CLI. Or forward the port first
+(`ssh -L 8765:127.0.0.1:8765 <box>`, then `gads auth login --no-browser --port 8765 ...` on the
+box) and the redirect completes on its own. The pasted address holds a one-time code that is
+useless without the PKCE verifier this process holds; the CLI never echoes it.
+
+The login never prints the client secret or the refresh token. `gads config unset
+service-account-key [--role writer]` deletes a stored credential file; revoke the grant itself at
+<https://myaccount.google.com/permissions>. If a refresh is refused (`invalid_grant`), the token
+was revoked or expired: run `gads auth login` again.
 
 ### Read-only mode
 
@@ -120,8 +191,9 @@ back on for one environment (an agent's, say) but no environment variable can sw
 | --- | --- | --- |
 | `customer-id` | default customer, `123-456-7890` or `1234567890` | `GOOGLE_ADS_CUSTOMER_ID` wins |
 | `login-customer-id` | manager account the access goes through | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` wins |
-| `op-ref [--role]` | 1Password secret reference to a key | `GOOGLE_ADS_OP_READER_REF`, `GOOGLE_ADS_OP_WRITER_REF` win |
+| `op-ref [--role]` | 1Password secret reference to a credential (key or user OAuth) | `GOOGLE_ADS_OP_READER_REF`, `GOOGLE_ADS_OP_WRITER_REF` win |
 | `service-account-key [--role]` | key JSON on stdin, stored `0600` | `GOOGLE_ADS_JSON_KEY_FILE_PATH`, `GOOGLE_ADS_WRITE_JSON_KEY_FILE_PATH` win |
+| (`auth login [--role]`) | creates a user OAuth credential, stored `0600` or in 1Password | same as above |
 | `read-only` | `true` / `false` (default `true`) | `GOOGLE_ADS_READ_ONLY=1` can only switch it on |
 | `budget-cap` | amount in the account currency (`30`, `29.61`) | none, on purpose |
 | `audit-log` | absolute path of the audit log | none, on purpose |
@@ -286,10 +358,11 @@ Every attempt to call a non-read method appends one JSON line to
 `$XDG_STATE_HOME/gads/mutations.jsonl` (default `~/.local/state/gads/mutations.jsonl`, mode `0600`
 in a `0700` directory; move it with `gads config set audit-log /abs/path`). That includes refusals,
 dry runs, applies and failures. Each line holds the time, customer, method and path, risk class
-and reasons, `apply` / `confirm_spend` / `validate_only`, the credential role and its client email,
+and reasons, `apply` / `confirm_spend` / `validate_only`, the credential role, its type
+(`service_account` or `authorized_user`) and its client email (for a key),
 a redacted per-operation summary (verb, resource, resource name, name, status, update mask, budget
 amount), a SHA-256 of the body, the HTTP status, request id, created resource names, and the
-result (`refused`, `dry_run`, `applied`, `error`). It never holds the body, a token or a key. A
+result (`refused`, `dry_run`, `applied`, `error`). It never holds the body, a token, a client secret or a key. A
 write whose log cannot be opened is refused; if the line cannot be written after a successful
 call, the call exits 1 with kind `audit_failed` (do not retry it).
 

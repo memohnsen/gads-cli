@@ -5,13 +5,17 @@ Paste the block below into your agent's instructions. It is the whole contract.
 ```markdown
 # gads / googleads (Google Ads API CLI): agent reference
 
-Setup is a person's job. Never run `gads init`, never change config (`gads config set ...`),
-never handle key files, and never pass `--confirm-spend` (or `--force`) unless a person told you to,
-in this conversation, for this exact command.
+Setup is a person's job. Never run `gads init` or `gads auth login`, never change config
+(`gads config set ...`), never handle key, credential or OAuth client files, and never pass
+`--confirm-spend` (or `--force`) unless a person told you to, in this conversation, for this exact
+command.
 
 Status
 - `gads auth status`: one line of JSON, never a secret: customer, budget cap, read-only state,
-  audit log path, and per role (reader, writer) whether a key is configured.
+  audit log path, and per role (reader, writer) whether a credential is configured and its type
+  (service_account or authorized_user, i.e. user OAuth). Both kinds follow the same rules below.
+- kind "auth" mentioning invalid_grant and `auth login`: the user credential expired or was revoked.
+  Stop and tell the person; only they can log in again.
 
 Reading (always allowed)
 - `gads list campaigns|ad-groups|keywords|negatives|ads|budgets|assets|sitelinks|sitelink-links|conversion-actions`

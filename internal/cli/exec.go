@@ -159,7 +159,7 @@ func (a *app) execute(cmd *cobra.Command, x execSpec) error {
 	resp, callErr := a.client.Do(cmd.Context(), *x.req)
 	if log != nil {
 		entry.DurationMS = time.Since(start).Milliseconds()
-		entry.CredentialEmail = a.keyEmail(role)
+		entry.CredentialType, entry.CredentialEmail = a.credentialIdentity(role)
 		switch {
 		case callErr != nil:
 			var apiErr *api.Error

@@ -28,9 +28,11 @@ const DefaultTokenURL = "https://oauth2.googleapis.com/token"
 // AppDir is the directory name under the user config, cache and state dirs.
 const AppDir = "gads"
 
-// Credential roles. The reader is the Google Ads "Read only" service-account
-// user and is used for every read and, by default, every dry run; the writer
-// is the "Standard" user and is used only for calls sent with --apply.
+// Credential roles. The reader is used for every read and, by default, every
+// dry run; the writer only for calls sent with --apply. With service
+// accounts the reader is the Google Ads "Read only" user and the writer the
+// "Standard" user; a user OAuth credential carries the access of the person
+// who signed in, whichever role it is stored for.
 const (
 	RoleReader = "reader"
 	RoleWriter = "writer"
@@ -77,7 +79,8 @@ type Config struct {
 	ReadOnly        *bool `json:"read_only,omitempty"`
 	BudgetCapMicros int64 `json:"budget_cap_micros,omitempty"`
 	// OpReaderRef and OpWriterRef are 1Password secret references
-	// (op://<vault>/<item>/<field>) to the service-account key JSON.
+	// (op://<vault>/<item>/<field>) to the credential JSON: a
+	// service-account key or an authorized_user credential.
 	OpReaderRef string `json:"op_reader_ref,omitempty"`
 	OpWriterRef string `json:"op_writer_ref,omitempty"`
 	// DryRunCredential is the role dry runs (validate_only) use: reader
@@ -212,8 +215,9 @@ func WriteFileAtomic(p string, data []byte) error {
 	return nil
 }
 
-// CheckPrivate refuses a key file that group or others can read: a key
-// must be chmod 600 (or stricter). Windows has no such bits to check.
+// CheckPrivate refuses a credential file (a service-account key, a user
+// OAuth credential or an OAuth client file) that group or others can read:
+// it must be chmod 600 (or stricter). Windows has no such bits to check.
 func CheckPrivate(path string) error {
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -223,7 +227,7 @@ func CheckPrivate(path string) error {
 		return fmt.Errorf("%s is not a regular file", path)
 	}
 	if runtime.GOOS != "windows" && fi.Mode().Perm()&0o077 != 0 {
-		return fmt.Errorf("%s has mode %04o; a service-account key must not be readable by group or others: chmod 600 %s",
+		return fmt.Errorf("%s has mode %04o; a credential file must not be readable by group or others: chmod 600 %s",
 			path, fi.Mode().Perm(), path)
 	}
 	return nil

@@ -36,14 +36,16 @@ type app struct {
 	stdin          io.Reader
 	// cacheDir locates the token cache; nil means os.UserCacheDir.
 	cacheDir func() (string, error)
-	// keys caches the key of each credential role once loaded.
-	keys map[string]*auth.Key
+	// creds caches the credential of each role once loaded.
+	creds map[string]*auth.Credential
 	// tokenOverride replaces the token source of a role; a test seam.
 	tokenOverride func(role string) func(context.Context) (string, error)
 	// prompt and isTerminal are seams for `init`, the one interactive
 	// command; nil in production, where init uses the real terminal.
 	prompt     prompter
 	isTerminal func() bool
+	// openBrowser is the seam for `auth login`; nil means auth.OpenBrowser.
+	openBrowser func(url string) error
 }
 
 // Execute is the process entry point: it loads the embedded manifest and the
@@ -90,10 +92,10 @@ func (a *app) requireConfig(cmd *cobra.Command, args []string) error {
 	return api.Usagef("cannot load the configuration: %v", a.configErr)
 }
 
-// tokenSourceFor returns the token source of one credential role. The key
-// is loaded on the first API call, so a missing or broken key cannot break
-// commands that never call the API. It is nil when the role has no key
-// source, which the client reports as a usage error.
+// tokenSourceFor returns the token source of one credential role. The
+// credential is loaded on the first API call, so a missing or broken one
+// cannot break commands that never call the API. It is nil when the role has
+// no credential source, which the client reports as a usage error.
 func (a *app) tokenSourceFor(role string) func(context.Context) (string, error) {
 	if a.tokenOverride != nil {
 		return a.tokenOverride(role)
@@ -102,40 +104,43 @@ func (a *app) tokenSourceFor(role string) func(context.Context) (string, error) 
 		return nil
 	}
 	return func(ctx context.Context) (string, error) {
-		key, err := a.loadKey(ctx, role)
+		cred, err := a.loadCredential(ctx, role)
 		if err != nil {
 			return "", err
 		}
-		return a.newSource(key).Token(ctx)
+		return a.newSource(cred).Token(ctx)
 	}
 }
 
-func (a *app) newSource(key *auth.Key) *auth.Source {
-	return &auth.Source{Key: key, TokenURL: a.res.TokenURL, AllowCustomBase: a.res.AllowCustomBase, CacheDir: a.cacheDir}
+func (a *app) newSource(cred *auth.Credential) *auth.Source {
+	return &auth.Source{Key: cred.Key, User: cred.User, TokenURL: a.res.TokenURL,
+		AllowCustomBase: a.res.AllowCustomBase, CacheDir: a.cacheDir}
 }
 
-// loadKey loads and caches the key of role from its configured source.
-func (a *app) loadKey(ctx context.Context, role string) (*auth.Key, error) {
-	if k, ok := a.keys[role]; ok {
-		return k, nil
+// loadCredential loads and caches the credential of role from its
+// configured source.
+func (a *app) loadCredential(ctx context.Context, role string) (*auth.Credential, error) {
+	if c, ok := a.creds[role]; ok {
+		return c, nil
 	}
-	k, err := auth.LoadKey(ctx, a.res.Credential(role))
+	c, err := auth.LoadCredential(ctx, a.res.Credential(role))
 	if err != nil {
 		return nil, err
 	}
-	if a.keys == nil {
-		a.keys = map[string]*auth.Key{}
+	if a.creds == nil {
+		a.creds = map[string]*auth.Credential{}
 	}
-	a.keys[role] = k
-	return k, nil
+	a.creds[role] = c
+	return c, nil
 }
 
-// keyEmail is the client email of a role's key once it has been loaded.
-func (a *app) keyEmail(role string) string {
-	if k, ok := a.keys[role]; ok {
-		return k.ClientEmail
+// credentialIdentity is the kind and identity of a role's credential once it
+// has been loaded, for the audit log; never a secret.
+func (a *app) credentialIdentity(role string) (kind, identity string) {
+	if c, ok := a.creds[role]; ok {
+		return c.Kind(), c.Identity()
 	}
-	return ""
+	return "", ""
 }
 
 func credentialHint(role string) string { return auth.SetupHint(role) }
