@@ -65,3 +65,9 @@ Errors
 - Set a budget cap before any agent works on campaigns: `gads config set budget-cap <amount>`.
 - Review `~/.local/state/gads/mutations.jsonl` for what was attempted and applied.
 - Regenerate the agent's command knowledge from `gads commands --json` after an upgrade.
+
+## Developing gads-cli
+
+Agents that change the CLI itself, rather than use it, follow [AGENTS.md](../AGENTS.md) at the
+repository root. It points to the vendored skills in `.codex/skills/` (with `.claude/skills/`
+symlinks): `finish-work`, `merge-and-deploy`, `release-cli` and `remote-gate`.

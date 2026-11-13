@@ -432,6 +432,9 @@ make check       # vet, manifest drift check, tests
 ./scripts/check-secrets.sh   # what CI runs to keep credentials out of the tree
 ```
 
+Agents changing the code follow [AGENTS.md](AGENTS.md), which points to the repository's skills
+(`.codex/skills/`) for finishing, merging and releasing a change.
+
 CI (GitHub Actions) runs vet and tests on Linux and macOS, the secret scan, gofmt, the manifest
 drift check and a cross-compile. Pushing a `v*` tag runs GoReleaser, which publishes Linux and macOS
 binaries for amd64 and arm64 to GitHub Releases (`-rc` tags publish as pre-releases).
