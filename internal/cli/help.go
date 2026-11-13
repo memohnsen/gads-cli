@@ -165,8 +165,20 @@ func (a *app) longHelp(meth *manifest.Method) string {
 			writeFieldTable(&b, s.Fields)
 		}
 	}
-	if meth.ValidateOnly {
-		b.WriteString("\n--validate-only: Google checks the request completely and applies nothing.\n")
+	switch {
+	case meth.Risk == manifest.RiskRead:
+	case meth.ValidateOnly && manifest.NeedsConfirm(meth.Risk):
+		b.WriteString("\nGated (" + meth.Risk + "-class): dry-run it with --validate-only; apply it with --apply --confirm-spend.\n")
+	case meth.ValidateOnly:
+		b.WriteString("\nSent as a dry run (validate_only: Google checks it, applies nothing) unless --apply is given.\n" +
+			"Operations that enable, bid, set budgets, feed bidding or remove are spend- or delete-class\n" +
+			"and need --apply --confirm-spend; dry-run those with --validate-only.\n")
+	default:
+		confirm := ""
+		if manifest.NeedsConfirm(meth.Risk) {
+			confirm = " --confirm-spend"
+		}
+		b.WriteString("\nNo dry run: this method has no validate_only, so it runs only with --apply" + confirm + ".\n")
 	}
 	if meth.Paging != manifest.PagingNone {
 		fmt.Fprintf(&b, "--all follows page tokens and prints one merged JSON array of the %s rows.\n", meth.ResultsField)

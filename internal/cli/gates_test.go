@@ -68,7 +68,8 @@ func TestSpendIsGatedBeforeTheNetwork(t *testing.T) {
 		if code != 2 || errJSON(t, errb)["kind"] != "guardrail" {
 			t.Fatalf("%v: exit %d %s", flags, code, errb.String())
 		}
-		if l := auditLines(t, a); len(l) != 1 || l[0]["result"] != "refused" || l[0]["risk_class"] != "write" && l[0]["risk_class"] != "spend" {
+		if l := auditLines(t, a); len(l) != 1 || l[0]["result"] != "refused" || l[0]["risk_class"] != "spend" ||
+			!strings.Contains(l[0]["reasons"].(string), "status set to ENABLED") {
 			t.Fatalf("%v: refusals are audited: %v", flags, l)
 		}
 	}

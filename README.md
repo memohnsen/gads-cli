@@ -1,437 +1,380 @@
-# googleads
+# gads-cli (`googleads`)
 
 A command-line client for the [Google Ads API](https://developers.google.com/google-ads/api),
-built for agents and scripts: JSON in, JSON out, one static binary, no runtime dependencies. The
-command tree is generated from Google's Discovery document for API v25, so every method of that
-version is reachable as a command without hand-written glue. stdout carries the API response and
-nothing else; every failure leaves one line of JSON on stderr.
+built for agents and scripts: JSON in, JSON out, one static binary, no runtime dependencies, and
+hard gates on anything that can spend money.
 
-It keeps the two decisions that cost money with a person: switching a campaign on, and how much a
-budget may spend. Both need an explicit flag or a setting only a person changes; see
-[Guardrails](#guardrails).
+This is a fork of [wir-drei-digital/google-ads-cli](https://github.com/wir-drei-digital/google-ads-cli)
+(MIT). Upstream generates the whole Google Ads REST surface from Google's Discovery document and
+authenticates with a service account without a developer token. This fork adds:
 
-googleads is not affiliated with or endorsed by Google.
+- **Dry-run by default.** Every write is sent with `validate_only` unless you pass `--apply`.
+- **Two-flag spend gate.** Enabling things, budgets, bids and bid strategies, conversion changes
+  that feed bidding, billing, admin calls and deletes need `--apply --confirm-spend`.
+- **PAUSED creates.** Campaign, ad group, ad and keyword creates must say `"status":"PAUSED"`.
+- **Account-wide budget cap**, on top of upstream's per-budget cap.
+- **Separate reader and writer credentials**, loaded from 1Password, an env-named `chmod 600` file,
+  or a `0600` file under the config directory. Read-only mode is on by default.
+- **Audit log**: one JSON line for every write attempt.
+- **First-class wrappers** (`list`, `get`, `pause`, `enable`, `create`, `update`, `link`, `unlink`)
+  and CSV/table output for reports.
+- **Google Ads API v26.**
+
+stdout carries the API response and nothing else; every failure leaves one line of JSON on stderr.
+gads-cli is not affiliated with or endorsed by Google.
 
 ## Install
 
+Prebuilt binaries for Linux and macOS (amd64, arm64) are on
+[GitHub Releases](https://github.com/memohnsen/gads-cli/releases), with `checksums.txt`. Unpack,
+put `googleads` on your `PATH`, and add the short alias:
+
 ```sh
-go install github.com/wir-drei-digital/google-ads-cli/cmd/googleads@latest
+ln -s googleads "$(dirname "$(command -v googleads)")/gads"
 ```
 
-Or download a prebuilt binary from
-[GitHub Releases](https://github.com/wir-drei-digital/google-ads-cli/releases):
+From source (Go 1.26 or newer):
 
-| OS      | Architectures | Archive   |
-| ------- | ------------- | --------- |
-| Linux   | amd64, arm64  | `.tar.gz` |
-| macOS   | amd64, arm64  | `.tar.gz` |
-| Windows | amd64         | `.zip`    |
-
-Each release also ships `checksums.txt`. Unpack the archive and put `googleads` on your `PATH`.
-
-## Setup (once)
-
-1. Use a Google Cloud project that is not on the Free Trial and has no suspended billing. Enable
-   the Google Ads API in it.
-2. Apply for API access on the project's Google Ads API page in the Cloud Console. Explorer access
-   is enough for campaign work. Keyword Planner and the other planning services need Basic access,
-   which needs brand verification of the project. Google may revoke access that goes unused for
-   90 days.
-3. Create a service account in the project. It needs no IAM roles. Create one JSON key per machine
-   that will run googleads; a key can be downloaded only once.
-4. In Google Ads, under Admin, Access and security, add the service account's email with Standard
-   access.
-5. On each machine, run `googleads init`. It asks for the key file, the customer ID and a budget
-   cap, checks the key with two read-only calls and saves everything. Without a terminal, use the
-   `config set` commands instead:
-
-   ```sh
-   googleads config set service-account-key < key.json
-   googleads config set customer-id 123-456-7890
-   googleads config set budget-cap 30
-   ```
-
-   Delete the downloaded key file afterwards.
-
-   `init` does not ask for a login customer ID. If the service account reaches the account through
-   a manager account, run `googleads config set login-customer-id <manager-id>` before `init`, so
-   that its access check goes through the manager too.
-6. In an account that already has campaigns, look for campaigns that lack the EU political
-   advertising declaration before the first change. One undeclared campaign blocks every campaign
-   change in the account:
-
-   ```sh
-   googleads search --query "SELECT campaign.id, campaign.name FROM campaign WHERE campaign.missing_eu_political_advertising_declaration = TRUE"
-   ```
-
-## Authentication
-
-googleads authenticates with a Google Cloud service-account key. The first source found wins:
-
-1. `GOOGLE_ADS_JSON_KEY_FILE_PATH`, the path to a key file (the name Google's own client libraries
-   use);
-2. the key stored in the config file with `googleads config set service-account-key < key.json`,
-   which reads the key from stdin, never from the command line.
-
-The key must be a service-account key (`"type": "service_account"`). An OAuth client file or a user
-credential is refused with a message that says what the file is.
-
-googleads exchanges the key for a one-hour access token at `https://oauth2.googleapis.com/token`
-and caches the token in `<user cache dir>/googleads/token.json` (`0600`), reusing it while at least
-60 seconds of validity remain. The `token_uri` inside the key file is ignored.
-
-There is no developer token. Google sunset it on 2026-09-09; the access level now belongs to the
-Cloud project. googleads never sends a `developer-token` header, and `googleads api` refuses to set
-one.
-
-`googleads auth status` prints the configuration as one line of JSON, offline, never a key or a
-token:
-
-```json
-{"mode":"service_account","source":"config","client_email":"gads@proj.iam.gserviceaccount.com","private_key_id":"0a1b...","project_id":"proj","token_cached_until":"2026-09-25T14:03:11Z","customer_id":"1234567890","budget_cap":"30","read_only":false}
+```sh
+git clone https://github.com/memohnsen/gads-cli && cd gads-cli
+make install            # builds bin/googleads, installs it and a `gads` symlink into ~/.local/bin
+# or: go install github.com/memohnsen/gads-cli/cmd/googleads@latest
 ```
 
-| Key | Meaning |
-| --- | --- |
-| `mode` | `service_account`, or `none` when no key is configured |
-| `source` | `env` (`GOOGLE_ADS_JSON_KEY_FILE_PATH`) or `config` |
-| `client_email`, `private_key_id`, `project_id` | from the key |
-| `token_cached_until` | when the cached access token expires, if one is cached |
-| `customer_id`, `login_customer_id` | the default customer and manager account |
-| `budget_cap` | the budget cap in the account's currency, if one is set |
-| `read_only` | whether read-only mode is on |
-| `missing` | what blocks calls: `service_account_key`, `valid_service_account_key`, `customer_id` |
-| `hint` | the commands that fix what is missing |
+`googleads` and `gads` are the same binary; the examples below use `gads`.
 
-`googleads auth token` prints a valid access token to stdout, for piping into another tool. That is
-a credential: do not log it.
+## Prerequisites (done once, by a person)
 
-A key is revoked only by deleting it in the Cloud Console (IAM & Admin, Service accounts, Keys).
-`googleads config unset service-account-key` removes the local copy and nothing else. See
-[SECURITY.md](SECURITY.md).
+The CLI cannot do these for you, and it never creates Cloud or Ads resources itself.
 
-### Configuration
+- [ ] **Cloud project.** Create or choose a Google Cloud project you own that is not on a
+      suspended billing account.
+- [ ] **Enable the Google Ads API** on that project. This grants Test access immediately (test
+      accounts only).
+- [ ] **Apply for Explorer access** on the project's Google Ads API overview page in the Cloud
+      Console. It is automated and usually takes minutes. Explorer covers everything in this CLI
+      except planning services (Keyword Planner, forecasts, audience insights), which need Basic.
+- [ ] **Two service accounts** in that project, neither with IAM roles:
+      - a **reader**, added to Google Ads with **Read only** access, used for reports and dry runs;
+      - a **writer**, added with **Standard** access, used only for calls sent with `--apply`.
+      Download each JSON key once and put it straight into a password manager (1Password works
+      directly, see below) or a `chmod 600` file. Never paste a key into a chat, an issue or a repo.
+- [ ] **Grant access in Google Ads**: Admin > Access and security, add each service-account email
+      to your account with the matching level (Read only, Standard). Service accounts cannot be
+      "Email only". Do not grant Admin.
+- [ ] **Configure the CLI** on each machine (next section), including a budget cap.
+- [ ] In an account with existing campaigns, find campaigns that lack the EU political advertising
+      declaration; one undeclared campaign blocks every campaign change:
+      `gads search --query "SELECT campaign.id, campaign.name FROM campaign WHERE campaign.missing_eu_political_advertising_declaration = TRUE"`
 
-The config file lives at `<user config dir>/googleads/config.json`, written `0600` inside a `0700`
-directory; `googleads config path` prints the exact location. `googleads config set <key>` and
-`googleads config unset <key>` take these keys:
+No developer token is used. Google retired it on 2026-09-09; access now belongs to the Cloud
+project. The CLI never sends a `developer-token` header and refuses to. If your organisation forbids
+service accounts, user OAuth is the documented fallback in Google's docs, but this CLI does not
+implement it.
 
-| Key | Value |
-| --- | --- |
-| `service-account-key` | the key JSON, from stdin only |
-| `customer-id` | the customer to act on by default, `123-456-7890` or `1234567890` |
-| `login-customer-id` | the manager account the access goes through |
-| `read-only` | `true` or `false` |
-| `budget-cap` | the highest daily budget googleads accepts, in the account's currency (`30`, `29.61`) |
+## Configuration
 
-Passing an environment variable name as the key (`GOOGLE_ADS_CUSTOMER_ID`) gets an error naming the
-key it meant. Unsetting a key that is not set is a no-op success.
+```sh
+gads config set customer-id 123-456-7890        # the account to act on by default
+gads config set budget-cap 30                    # the most daily budget the account may total
+gads config set login-customer-id 111-222-3333   # only if access goes through a manager account
+```
 
-Environment variables, which win over the file: `GOOGLE_ADS_JSON_KEY_FILE_PATH`,
-`GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_LOGIN_CUSTOMER_ID`, `GOOGLE_ADS_READ_ONLY`,
-`GOOGLE_ADS_API_BASE`, `GOOGLE_ADS_TOKEN_URL`, `GOOGLE_ADS_ALLOW_CUSTOM_BASE`. Two exceptions:
+### Credentials
 
-- The budget cap has no environment variable and no flag. It lives in the config file only.
-- `GOOGLE_ADS_READ_ONLY` (`1` or `true`) only switches read-only mode on. It cannot switch off a
-  read-only mode stored in the config file; to turn that off, run `googleads config unset read-only`.
+Each role (`reader`, `writer`) takes its key from the first source configured, in this order:
+
+1. **1Password**: `gads config set op-ref op://<vault>/<item>/<field>` (add `--role writer` for the
+   writer), or `GOOGLE_ADS_OP_READER_REF` / `GOOGLE_ADS_OP_WRITER_REF`. The CLI runs
+   `op read --no-newline <ref>` with stdin closed when it needs the key, so the key never lands on
+   disk. `op` must be signed in (desktop-app integration or `OP_SERVICE_ACCOUNT_TOKEN`).
+2. **A key file named by the environment**: `GOOGLE_ADS_JSON_KEY_FILE_PATH` (reader) and
+   `GOOGLE_ADS_WRITE_JSON_KEY_FILE_PATH` (writer). The file must be `chmod 600`; a key readable by
+   group or others is refused.
+3. **A stored key file**: `gads config set service-account-key [--role writer] < key.json` reads the
+   key from stdin, checks it, and writes `<config dir>/gads/credentials/<role>.json` with mode
+   `0600` in a `0700` directory. Delete the download afterwards.
+
+The config file itself never holds a key. Reads and dry runs use the reader; `--apply` uses the
+writer, and fails if no writer is configured. If your account refuses `validate_only` requests
+from a Read only user, run `gads config set dry-run-credential writer`; dry runs still apply
+nothing. With only one Standard key at first, configure it for both roles and keep read-only mode on
+until you mean to write.
+
+`gads auth status` prints one line of JSON: each role's source, client email, project and the
+last characters of its key id, plus the customer, budget cap, read-only state and audit log path.
+It never prints a private key or a token, and there is no command that prints a token.
+
+`gads init` is an interactive wizard for a person at a terminal that does the same as the commands
+above.
+
+### Read-only mode
+
+Read-only mode is **on by default**. It allows reads and dry runs and refuses every `--apply`. A
+person turns it off with `gads config set read-only false`. `GOOGLE_ADS_READ_ONLY=1` can switch it
+back on for one environment (an agent's, say) but no environment variable can switch it off.
+
+### All settings
+
+| `config set` key | Value | Environment |
+| --- | --- | --- |
+| `customer-id` | default customer, `123-456-7890` or `1234567890` | `GOOGLE_ADS_CUSTOMER_ID` wins |
+| `login-customer-id` | manager account the access goes through | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` wins |
+| `op-ref [--role]` | 1Password secret reference to a key | `GOOGLE_ADS_OP_READER_REF`, `GOOGLE_ADS_OP_WRITER_REF` win |
+| `service-account-key [--role]` | key JSON on stdin, stored `0600` | `GOOGLE_ADS_JSON_KEY_FILE_PATH`, `GOOGLE_ADS_WRITE_JSON_KEY_FILE_PATH` win |
+| `read-only` | `true` / `false` (default `true`) | `GOOGLE_ADS_READ_ONLY=1` can only switch it on |
+| `budget-cap` | amount in the account currency (`30`, `29.61`) | none, on purpose |
+| `audit-log` | absolute path of the audit log | none, on purpose |
+| `dry-run-credential` | `reader` (default) or `writer` | none |
+
+`gads config unset <key>` removes a value; `gads config path` prints the config file location
+(`<user config dir>/gads/config.json`). For tests and proxies, `GOOGLE_ADS_API_BASE` and
+`GOOGLE_ADS_TOKEN_URL` work only together with `GOOGLE_ADS_ALLOW_CUSTOM_BASE=1`.
 
 ## Usage
 
-The customer comes from `--customer-id` (dashes allowed), else `GOOGLE_ADS_CUSTOMER_ID`, else the
-config file. `--login-customer-id` sets the manager account for one call.
-
-Run a GAQL report, one page or all of them merged into one JSON array of rows:
+### Everyday operations
 
 ```sh
-googleads search --query "SELECT campaign.id, campaign.name, metrics.clicks, metrics.cost_micros FROM campaign WHERE segments.date DURING LAST_7_DAYS"
-googleads search --all --query "SELECT campaign.id, campaign.name, metrics.clicks, metrics.cost_micros FROM campaign WHERE segments.date DURING LAST_7_DAYS"
+# Reports (GAQL). Each list/get follows every page and prints one JSON array; --format csv|table too.
+gads list campaigns
+gads list ad-groups --campaign-id 123
+gads list keywords --ad-group-id 456 --format table
+gads list ads | negatives | budgets | assets | sitelinks | sitelink-links | conversion-actions
+gads get campaign 123
+gads get keyword 456~789                      # <adGroupId>~<criterionId>
+gads list keywords --show-query               # print the GAQL instead of running it
+
+# Creates are always PAUSED. Without --apply each command is a dry run.
+gads create budget --name "Brand" --amount 20 --validate-only               # budgets are spend-class
+gads create campaign --name "Brand" --budget-id 111 --location 2840 \
+    --bidding maximize-clicks --max-cpc 2
+gads create ad-group --campaign-id 123 --name "Shoes" --cpc-bid 1.50
+gads create keywords --ad-group-id 456 --keyword "running shoes" --keyword "trail shoes" --match-type PHRASE
+gads create keywords --campaign-id 123 --negative --keyword free --match-type BROAD
+gads create rsa --ad-group-id 456 --final-url https://example.com \
+    --headline "Run faster" --headline "Free returns" --headline "Shop shoes" \
+    --description "Lightweight running shoes." --description "Ships in 24 hours." --path1 shoes
+gads create sitelink --link-text "Pricing" --final-url https://example.com/pricing --campaign-id 123
+gads create text-asset --text "Free shipping"
+gads create image-asset --file logo.png --name "Logo"
+gads create conversion-action --name "Lead form" --category SUBMIT_LEAD_FORM    # secondary by default
+
+# Updates
+gads update campaign 123 --name "Brand 2026"
+gads update rsa 999 --headline A --headline B --headline C                       # <adId>
+gads update keyword 456~789 --final-url https://example.com/shoes
+gads update conversion-action 321 --primary=false
+
+# Status
+gads pause campaign 123 --apply
+gads pause keyword 456~789 --apply
+gads enable campaign 123 --validate-only                                         # dry run of a spend change
+gads enable campaign 123 --apply --confirm-spend                                 # a person's decision
+
+# Sitelinks on existing assets
+gads link sitelink 888 --campaign-id 123 --apply
+gads unlink sitelink 888 --campaign-id 123 --apply --confirm-spend               # removing is delete-class
 ```
 
-`--query @report.gaql` reads the query from a file. Get keyword ideas (needs Basic access) with a
-body from a file:
+Money flags take amounts in the account currency (`1.50`), never micros. Every wrapper prints the
+same output and goes through the same gates and audit log as the raw commands below.
+
+### The full API
+
+The generated command tree covers every method of the API version, with the request body as JSON:
 
 ```sh
-googleads generate-keyword-ideas --data @ideas.json
+gads search --query "SELECT campaign.id, campaign.name, campaign.status FROM campaign"
+gads search --all --format csv --query @report.gaql      # every page, as CSV
+gads mutate --data @campaign.json                        # generic mutate; dry run
+gads mutate --data @campaign.json --apply                # apply
+gads campaigns mutate --help                             # fields, example body, risk class
+gads schema Campaign                                     # fields of any type
+gads commands --json                                     # machine-readable catalog
+gads api GET v26/customers:listAccessibleCustomers       # raw escape hatch; same gates
 ```
 
-```json
-{"language":"languageConstants/1001","geoTargetConstants":["geoTargetConstants/2756"],"keywordPlanNetwork":"GOOGLE_SEARCH","keywordSeed":{"keywords":["rapport automatisieren"]}}
-```
-
-Build a paused Search campaign in one request. Temporary resource names (negative ids) let later
-operations reference earlier ones. `--validate-only` makes Google check the whole request and apply
-nothing; send it again without the flag to create it:
-
-```sh
-googleads mutate --validate-only --data @campaign.json
-googleads mutate --data @campaign.json
-```
+A whole Search campaign can go in one `mutate` with temporary resource names (negative ids)
+that later operations reference:
 
 ```json
 {"mutateOperations":[
   {"campaignBudgetOperation":{"create":{"resourceName":"customers/1234567890/campaignBudgets/-1","name":"Brand","amountMicros":"20000000","deliveryMethod":"STANDARD","explicitlyShared":false}}},
-  {"campaignOperation":{"create":{"resourceName":"customers/1234567890/campaigns/-2","name":"Brand","status":"PAUSED","advertisingChannelType":"SEARCH","campaignBudget":"customers/1234567890/campaignBudgets/-1","manualCpc":{"enhancedCpcEnabled":false},"networkSettings":{"targetGoogleSearch":true,"targetSearchNetwork":false,"targetContentNetwork":false,"targetPartnerSearchNetwork":false},"containsEuPoliticalAdvertising":"DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING"}}},
-  {"adGroupOperation":{"create":{"resourceName":"customers/1234567890/adGroups/-3","name":"Brand","campaign":"customers/1234567890/campaigns/-2","type":"SEARCH_STANDARD","status":"ENABLED","cpcBidMicros":"1000000"}}}
+  {"campaignOperation":{"create":{"resourceName":"customers/1234567890/campaigns/-2","name":"Brand","status":"PAUSED","advertisingChannelType":"SEARCH","campaignBudget":"customers/1234567890/campaignBudgets/-1","manualCpc":{},"networkSettings":{"targetGoogleSearch":true,"targetSearchNetwork":false,"targetContentNetwork":false,"targetPartnerSearchNetwork":false},"containsEuPoliticalAdvertising":"DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING"}}},
+  {"adGroupOperation":{"create":{"resourceName":"customers/1234567890/adGroups/-3","name":"Brand","campaign":"customers/1234567890/campaigns/-2","type":"SEARCH_STANDARD","status":"PAUSED","cpcBidMicros":"1000000"}}}
 ]}
 ```
 
-A full campaign adds keywords (`adGroupCriterionOperation`), a responsive search ad
-(`adGroupAdOperation`) and location targeting (`campaignCriterionOperation`) to the same list.
+Because it creates a budget, that request is spend-class: dry-run it with `--validate-only`, apply
+it with `--apply --confirm-spend`.
 
-Switch the campaign on. That is a spend decision, so it needs `--force`:
+Bodies come from `--data '{...}'`, `--data @file.json` or `--data -`. Responses are Google's
+camelCase JSON; int64 values are strings and money is in micros (1 unit = 1,000,000 micros).
+`--all` merges every page into one array; `--format csv|table` flattens report rows into dotted
+columns (`campaign.id`, `metrics.clicks`). Global flags: `--customer-id`, `--login-customer-id`,
+`--apply`, `--confirm-spend`, `--validate-only`, `--output <file>`, `--timeout`, `--verbose`.
 
-```sh
-googleads campaigns mutate --force --data '{"operations":[{"update":{"resourceName":"customers/1234567890/campaigns/123","status":"ENABLED"},"updateMask":"status"}]}'
+### Dry-run output
+
+A dry run prints an envelope, so nobody mistakes it for a change:
+
+```json
+{"dry_run":true,"applied":false,"method":"customers.campaigns.mutate","risk_class":"write","operations":[{"index":0,"verb":"create","resource":"Campaign","name":"Brand","status":"PAUSED","class":"write"}],"next":"Google validated the request and applied nothing; re-run with --apply to apply it","response":{}}
 ```
 
-Find your way around:
+An applied call prints Google's response unchanged.
 
-```sh
-googleads schema Campaign             # fields of a resource or request type
-googleads campaigns mutate --help     # fields, an example body and the risk class
-googleads commands --json             # the machine-readable catalog of every command
-googleads api GET v25/customers:listAccessibleCustomers   # raw request, guardrails still apply
-```
+## Safety model
 
-Bodies come from `--data '{...}'`, `--data @file.json` or `--data -` (stdin), up to 20 MB, and are
-sent as given, except that `--validate-only` and `--partial-failure` set `validateOnly` and
-`partialFailure`. Responses are Google's camelCase JSON, untouched; `--output <file>` writes the body
-to a file instead of stdout. The file is opened before the request, so a path that cannot be written
-is a usage error and nothing is sent; a failed request leaves an existing file as it was. If the
-write still fails after Google accepted the call, the response goes to stdout and the exit is 1
-with kind `output_failed`. int64 values (ids, `costMicros`, `amountMicros`, `clicks`) are strings.
-Money is in micros: 1 unit of the account's currency is 1,000,000 micros.
+### The gates
 
-`--all` follows page tokens and prints one JSON array of the merged rows; it always starts at the
-first page, whatever page token `--data` carries. `--max-pages` (default 100) caps it.
-`search --all` with `searchSettings.returnSummaryRow` is a usage error, because the merge would drop
-the summary row.
+| Call | No flags | `--validate-only` | `--apply` | `--apply --confirm-spend` |
+| --- | --- | --- | --- | --- |
+| read | runs | runs | runs | runs |
+| write (create PAUSED, rename, pause, assets, negatives, ...) | dry run | dry run | **applies** | applies |
+| delete / spend / admin | refused, nothing sent | dry run | refused, nothing sent | **applies** |
+| method with no `validate_only` | refused, nothing sent | refused | applies if write | applies |
 
-Global flags: `--customer-id`, `--login-customer-id`, `--force`, `--output`, `--timeout` (per
-attempt, default 60s) and `--verbose` (method, path, status and response size on stderr; never a
-credential).
+- A refusal exits 2 with kind `guardrail` before any network I/O.
+- `--force` survives as a deprecated alias for `--confirm-spend` only. It never stands in for
+  `--apply`.
+- A `validateOnly` field inside `--data` counts for nothing; only the flags decide. On `--apply`
+  the CLI removes it, so what is logged is what is sent.
+- `--apply` and `--validate-only` together are a usage error.
+- In read-only mode every `--apply` is refused; dry runs still work.
 
-## Guardrails
+### What is spend-, delete- or admin-class
 
-### Risk classes
+Each method has a reviewed class in `tools/genmanifest/classifications.json`. Before a mutate is
+sent (generic `mutate`, any per-resource `mutate`, `batch-jobs add-operations`, and `api` calls to
+those paths) the guard reads every operation and raises the class:
 
-Every method has one reviewed class in `tools/genmanifest/classifications.json`, shown in its help
-and in the catalog.
+| Raised to | When |
+| --- | --- |
+| refused outright | a campaign, ad group, ad (`AdGroupAd`) or keyword create without `status` (Google's default is `ENABLED`) |
+| spend | a create with a status other than `PAUSED`; an update that sets status to anything but `PAUSED`/`REMOVED` (enabling), for campaigns, ad groups, ads, ad group criteria and asset groups |
+| spend | bids and bidding: campaign bidding fields (`manualCpc`, `targetSpend`, `maximizeConversions`, `targetCpa`, `targetRoas`, `biddingStrategy`, ...) on update; ad group and criterion bid fields on update; bid modifiers; portfolio bid-strategy updates; seasonality adjustments and data exclusions |
+| spend | budgets: any budget amount set on create or update; budget network settings; moving a campaign to another budget |
+| spend | conversions that feed bidding: a conversion action created without `"primaryForGoal": false`, made primary, or re-enabled; a customer or campaign conversion goal made biddable; campaign goal config changes |
+| delete | any `remove` operation; a status set to `REMOVED` |
+| admin | billing setups, account budget proposals, users, links, uploads, batch jobs, any unknown operation type and any `api` call to an unknown path |
 
-| Class | Meaning | Examples | Gate |
-| --- | --- | --- | --- |
-| `read` | reads or computes, changes nothing | `search`, `search-stream`, `generate-keyword-ideas`, `generate-keyword-forecast-metrics`, `google-ads-fields search`, `geo-target-constants suggest`, `list-accessible-customers`, `recommendations generate` | none; allowed in read-only mode |
-| `write` | creates or edits campaign entities | most per-resource `mutate` methods, the generic `mutate`, `customer mutate`, `recommendations dismiss` | blocked in read-only mode |
-| `delete` | removes something | any `remove` operation, `operations delete`, `remove-campaign-automatically-created-asset` | `--force` |
-| `spend` | can start spending or change how much | switching a campaign on, changing a budget amount, `experiments promote-experiment`, `graduate-experiment` and `schedule-experiment`, `campaign-drafts promote` | `--force` |
-| `admin` | outside campaign editing | users and invitations, billing setups and account budgets, account, data and product links, new client accounts, manager links, conversion and customer-data uploads, offline user data jobs, batch jobs, messages to Local Services leads, identity verification, incentives | `--force` |
+Pausing anything, renaming, creating PAUSED things, negatives and assets are plain writes.
 
-Without `--force`, a `delete`, `spend` or `admin` call exits 2 with kind `usage` before any network
-I/O, and the message names each operation that needs it and why.
-
-### Payload check
-
-One class per method is not enough, because one `mutate` call can do anything. Before a mutate is
-sent (the generic `mutate`, every per-resource `mutate`, `batch-jobs add-operations`, and `api`
-calls to those paths), googleads reads every operation in the body. The highest class found wins.
-`batch-jobs add-operations` stays `admin` whatever it carries, but the refusals below, including the
-budget cap, apply to its operations too.
-
-1. A `remove` operation is `delete`.
-2. A campaign `create` whose `status` is not exactly the string `"PAUSED"` is `spend`. That includes
-   a missing status, because Google's default is `ENABLED`, and numeric enum values.
-3. A campaign `update` that sets `status` to anything other than `"PAUSED"` is `spend`.
-4. A campaign `update` that sets `campaignBudget` (moving the campaign to another budget) is
-   `spend`.
-5. A budget `create` or `update` that sets `amountMicros` is checked against the budget cap. Without
-   a cap, or with an amount above it, the request is refused. `--force` and `--validate-only` do not
-   change that.
-6. A budget `update` that sets `amountMicros` within the cap is `spend`, whether it raises or lowers
-   the amount. An amount cleared through `updateMask` alone counts as 0 and is `spend` too. Pausing
-   the campaign is the way to stop spend without `--force`.
-7. A budget that sets `totalAmountMicros`, or a `period` other than the string `"DAILY"`, is
-   refused. The cap is a daily cap.
-8. Every other operation takes the class of the method it belongs to. An operation type in the
-   generic `mutate` takes the class of its per-resource method (`campaignOperation` takes the class
-   of `campaigns mutate`); an unknown operation type is `admin`.
-
-An operation that names more than one of `create`, `update` and `remove` is refused.
-
-How the body is read:
-
-- A field counts as set when it appears in the operation's object or in its `updateMask`, which
-  must be a comma-separated string.
-- Field names are matched in both spellings Google accepts (`amountMicros` and `amount_micros`).
-  The body that is sent is not modified.
-- A duplicate key, or both spellings of one field in the same object, refuses the request: the check
-  has to see exactly what Google will see.
-- Amounts are JSON numbers or decimal strings written as plain whole numbers of micros (digits only)
-  and compared exactly. Anything else refuses the request.
-- A mutate body that is not valid JSON is refused.
+The body is read strictly: duplicate keys, a field in both spellings (`amountMicros` and
+`amount_micros`), trailing data and non-digit amounts are refused, so the guard always sees what
+Google will see.
 
 ### Budget cap
 
-- Set it with `googleads config set budget-cap <amount>`, in the account's currency (`30` or
-  `29.61`, a dot as the decimal separator, at most six decimal places). It lives in the config file
-  only: no environment variable, no flag.
-- It applies to every daily budget amount in every request, with or without `--force` and
-  `--validate-only`. Without a cap no budget amount can be set at all.
-- It limits each budget, not the account: two campaigns with their own budgets can together spend
-  twice the cap. Switching each of them on is a separate `--force` decision.
-- Google may spend up to twice the daily budget on a single day and bills at most 30.4 times the
-  daily budget in a month.
+`gads config set budget-cap <amount>` is the most **daily budget the account may total**. No flag
+or environment variable changes it, and without one no budget amount can be set at all.
 
-### Gates and modes
+- Every budget amount in a request must be at or below the cap.
+- The amounts one invocation sets may not add up to more than the cap.
+- Before an `--apply` that sets budget amounts, the CLI reads every enabled daily budget in the
+  account with the reader key and refuses if the total afterwards would exceed the cap. One
+  invocation can only add what the cap has left. If that read fails, the apply is refused.
+- Fixed-total and custom-period budgets are refused; the cap is a daily cap.
 
-- **`--force`** is a per-call flag. It has no environment variable and no config setting, so every
-  spend decision stays visible in the command that made it.
-- **`--validate-only`** exists on the methods whose request supports it (`validate_only` in the
-  catalog). Google checks the request completely and applies nothing. Such a call skips the
-  `--force` gate and runs in read-only mode; the budget cap and the refusals above still apply. Only
-  the flag counts: a `validateOnly` field inside `--data` relaxes nothing.
-- **Read-only mode** (`GOOGLE_ADS_READ_ONLY=1` or `googleads config set read-only true`) allows
-  `read`-class calls and `--validate-only` calls only.
-- **`googleads api`** is not a bypass. A path that matches a known method, in any API version,
-  inherits its class, the payload check, the budget cap and the block list. An unmatched POST, PUT,
-  PATCH or DELETE is `admin`. In read-only mode it allows GET and `read`-class methods. GET and
-  DELETE take no `--data`. Every path segment must be non-empty, must not be `.` or `..`, and must
-  not contain `%`, whitespace or a backslash, so the common re-spellings of a known path cannot
-  dodge its checks. The body of an unmatched call is scanned whole: every `amountMicros` and
-  `totalAmountMicros`, in either spelling and at any depth, must be plain digits within the budget
-  cap, and without a cap it is refused, whatever `--force` says. It cannot set `Authorization`, a `developer-token` header, the method-override headers
-  `X-HTTP-Method-Override`, `X-HTTP-Method` and `X-Method-Override`, or the credential query
-  parameters `access_token`, `oauth_token` and `key`, and it has no `--validate-only`. The path
-  carries the customer, so `api` ignores `--customer-id`; it does honour `--login-customer-id`.
-- **Pinned hosts.** Credentials go only to `oauth2.googleapis.com` and `googleads.googleapis.com`
-  over HTTPS. `GOOGLE_ADS_API_BASE` and `GOOGLE_ADS_TOKEN_URL` pointing elsewhere are refused unless
-  `GOOGLE_ADS_ALLOW_CUSTOM_BASE=1` is set too, and plain HTTP is allowed only on loopback. Redirects
-  are never followed.
+Google may spend up to twice a daily budget on one day and bills at most 30.4 times it in a month.
 
-Not gated, by decision: bids and bidding strategies, enabling ad groups, ads and keywords, negative
-keywords, conversion actions, and pausing anything. The budget bounds what those can cost, and
-switching a campaign on is gated.
+### Audit log
 
-### What the CLI cannot do
+Every attempt to call a non-read method appends one JSON line to
+`$XDG_STATE_HOME/gads/mutations.jsonl` (default `~/.local/state/gads/mutations.jsonl`, mode `0600`
+in a `0700` directory; move it with `gads config set audit-log /abs/path`). That includes refusals,
+dry runs, applies and failures. Each line holds the time, customer, method and path, risk class
+and reasons, `apply` / `confirm_spend` / `validate_only`, the credential role and its client email,
+a redacted per-operation summary (verb, resource, resource name, name, status, update mask, budget
+amount), a SHA-256 of the body, the HTTP status, request id, created resource names, and the
+result (`refused`, `dry_run`, `applied`, `error`). It never holds the body, a token or a key. A
+write whose log cannot be opened is refused; if the line cannot be written after a successful
+call, the call exits 1 with kind `audit_failed` (do not retry it).
 
-It cannot stop a caller with shell access from passing `--force` or raising the cap in the config
-file; it makes both explicit and visible. The other layers belong to the operator: the rules they
-give their agents, and the access the service account holds in Google Ads (Standard access cannot
-manage users).
+### Blocked methods
 
-## Blocked and skipped methods
+Refused whatever the flags, as commands, inside `mutate`, and through `api`:
+`recommendations apply` (can set budgets Google chooses), `recommendation-subscriptions
+mutate-recommendation-subscription` (auto-apply), `reservations book-campaigns` (commits spend).
+`media.upload` (YouTube video upload) is not implemented.
 
-Three methods can set a budget amount or a spend commitment that the request itself does not show,
-so the budget cap could not hold for them. They stay in the command tree and in the catalog
-(`blocked: true` with the reason), and are refused before any network I/O, as commands, as
-operation types inside `mutate`, and through `api`, whatever the flags:
+### Other protections
 
-| Command | Reason |
-| --- | --- |
-| `recommendations apply` | applying a recommendation can set a budget to an amount Google chooses, which the budget cap cannot check; read recommendations with search and carry out a worthwhile one through mutate |
-| `recommendation-subscriptions mutate-recommendation-subscription` | an auto-apply subscription lets Google change budgets later, outside any check |
-| `reservations book-campaigns` | booking a reservation commits spend that the budget cap cannot check |
-
-One method is not generated at all: `media.upload`. YouTube video upload uses Google's media upload
-protocol, which this client does not implement.
-
-Both lists live in `tools/genmanifest/overrides.json`, each entry with its reason.
+Credentials go only to `oauth2.googleapis.com` and `googleads.googleapis.com` over HTTPS; redirects
+are never followed; `api` cannot set `Authorization`, `developer-token`, method-override headers or
+credential query parameters, and refuses path spellings that could dodge the method match. See
+[SECURITY.md](SECURITY.md).
 
 ## Errors and exit codes
 
-Errors are one line of JSON on stderr, never on stdout (`details` shortened here):
+Errors are one line of JSON on stderr: `{"kind","error","status","details","request_id"}`.
 
-```json
-{"kind":"validation","error":"POST v25/customers/1234567890/googleAds:mutate: HTTP 400: fieldError.REQUIRED: The required field was not present. (mutate_operations[0].campaign_operation.create.contains_eu_political_advertising)","status":400,"details":{"error":{"code":400,"status":"INVALID_ARGUMENT"}},"request_id":"Ab12Cd34"}
-```
-
-`status` is the HTTP status and is omitted when there was no response. `details` is the parsed error
-body (for Google Ads, the `GoogleAdsFailure` with all its errors) or `null`. `request_id` comes from
-the `request-id` header or the failure and is omitted when unknown. The message leads with Google's
-first error: its code, its message and the field path. Branch on `kind`:
-
-| `kind` | Meaning |
+| Exit | Meaning |
 | --- | --- |
-| `auth` | HTTP 401, or the token endpoint refused the key (deleted or disabled key) |
-| `forbidden` | HTTP 403 |
-| `not_found` | HTTP 404 or 410 |
-| `validation` | other 4xx; also a 3xx, which is refused rather than followed (the message names the `Location`) |
-| `conflict` | HTTP 409, or Google's `databaseError.CONCURRENT_MODIFICATION`: the same resource changed concurrently. The request was rejected as a whole; retry once after a short wait |
-| `rate_limited` | HTTP 429 beyond the retry budget |
-| `server` | HTTP 5xx |
-| `transport` | a network failure that is safe to retry: the request never reached Google, or it could not change anything (a read or a `--validate-only` call); also the token endpoint answering 429 or 5xx, and a call cancelled while waiting to retry |
-| `outcome_unknown` | a change failed in flight and may or may not have been applied; check with `search` before retrying |
-| `incomplete` | `--all` hit `--max-pages`; stdout holds the partial array |
-| `partial_failure` | with `--partial-failure`, some operations failed; stdout holds the full response, including the ones that succeeded |
-| `output_failed` | the call succeeded, but the response could not be written to the `--output` file (it is on stdout instead) or to stdout; do not repeat a change |
-| `usage` | the command was wrong or a guardrail refused it; nothing was sent |
+| `0` | success, including a dry run |
+| `1` | API or network error, or a post-success problem (`output_failed`, `audit_failed`) |
+| `2` | `usage` (malformed command) or `guardrail` (a safety rule refused it); nothing was sent |
 
-Hints are appended to the message for the errors people hit during setup:
+Kinds: `auth`, `forbidden`, `not_found`, `validation`, `conflict`, `rate_limited`, `server`,
+`transport`, `outcome_unknown`, `incomplete`, `partial_failure`, `output_failed`, `audit_failed`,
+`usage`, `guardrail`. `outcome_unknown` means a change may or may not have landed: check with a
+report before retrying. Rate limits and safe transient failures are retried inside the CLI; a write
+is never replayed. Setup errors get hints (Test access, missing account access, Explorer vs Basic,
+EU political declaration).
 
-- `CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION`: the Cloud project still has Test access, which
-  reaches test accounts only; apply for Explorer or Basic access.
-- A planning method (keyword ideas, forecasts, reach, audience insights) refused with HTTP 403:
-  Explorer access blocks planning services; Basic access is required.
-- `USER_PERMISSION_DENIED`: the service account has no access to this customer; add its email in
-  Google Ads under Admin, Access and security, or set `login-customer-id` to the manager account it
-  was added to.
-- `EU_POLITICAL_ADVERTISING_DECLARATION_REQUIRED`: a campaign in the account lacks the declaration;
-  the hint names the `search` that finds it.
+## API version and upgrades
 
-| Exit code | Meaning |
+| | |
 | --- | --- |
-| `0` | success |
-| `1` | API or network error (any `kind` except `usage`) |
-| `2` | usage error, which includes every guardrail refusal |
+| Pinned version | **Google Ads API v26** (Discovery revision in `spec/PROVENANCE.json`; calls use the version's latest minor automatically) |
+| v26 sunset | scheduled for **November 2027** |
+| Previous version | v25, valid until August 2027 (upstream still ships it) |
 
-Retries happen inside the CLI; do not add a retry loop of your own. HTTP 429 is retried for every
-call, waiting as long as Google asks (`retryDelay` in its quota error details, else `Retry-After`,
-else exponential backoff with jitter), within a total budget of 60 seconds. When Google asks for
-longer than the budget left (a daily quota is used up), the call fails at once with `rate_limited`
-and the delay in the message. Network failures and HTTP 5xx are retried only for `read`-class and
-`--validate-only` calls, which includes the POST-based `search`, up to three attempts. A change that
-fails in flight is never replayed. Ctrl-C and SIGTERM cancel the request in flight and any retry
-wait.
+Google releases a major version a few times a year and sunsets each one about a year later. Plan at
+most two upgrades a year, and subscribe to the
+[Google Ads Developer Blog](https://ads-developers.googleblog.com/search/label/google_ads_api) for
+sunset notices. Upgrading:
 
-## API version policy
-
-googleads is pinned to Google Ads API v25, which Google plans to sunset around August 2027. Moving to
-a new version:
-
-1. `make update-spec VERSION=vNN` downloads and validates the new Discovery document.
-2. `make generate` rebuilds the embedded manifest. New methods are not guessed: the generator lists
-   the unclassified ones and fails. `go run ./tools/genmanifest -write-proposals` proposes classes
-   by rule; review every one, and every changed class, before they go into `classifications.json`.
-3. Read the diff of the command list, then update the golden file with
-   `UPDATE_GOLDEN=1 go test ./tools/genmanifest`. A renamed or removed command is a breaking change.
-4. Release: a minor version when no command disappears or is renamed, a major one otherwise.
-
-Google sunsets each API version about a year after its release, so an old release of googleads
-stops working when its version is sunset. Upgrade before then.
+1. `make update-spec VERSION=vNN` fetches and validates the new Discovery document, replaces the
+   old one in `spec/`, and regenerates the embedded manifest.
+2. New methods are never guessed: the generator lists unclassified ones and fails.
+   `go run ./tools/genmanifest -write-proposals` proposes classes; review each one before it goes
+   into `classifications.json`.
+3. Review the command-catalog diff (`UPDATE_GOLDEN=1 go test ./tools/genmanifest` updates
+   `tools/genmanifest/testdata/golden_commands.txt`) and run `go test ./...`. The test
+   `TestReportFieldsExistInTheSchema` catches GAQL fields the wrappers select that the new version
+   renamed.
+4. Release under SemVer: **minor** when commands are only added, **major** when a command
+   disappears or is renamed. Update the table above.
 
 ## Development
 
 ```sh
-make build        # go build -o bin/googleads ./cmd/googleads
-make test         # go test ./...
-make generate     # regenerate internal/manifest/manifest.json.gz from the vendored Discovery document
-make update-spec  # re-fetch spec/googleads-v25.discovery.json (network; VERSION=vNN for another version)
-make check        # go vet + manifest drift check + tests; CI runs these plus a CGO-free cross-compile
+make build       # bin/googleads
+make install     # ~/.local/bin/googleads and the gads symlink (PREFIX=/usr/local to change)
+make test        # go test ./...
+make check       # vet, manifest drift check, tests
+./scripts/check-secrets.sh   # what CI runs to keep credentials out of the tree
 ```
 
-`e2e/smoke_test.go` builds the real binary and drives it against a fake Google. `e2e/live_test.go`
-runs against a real account with your real configuration and changes nothing: it lists accessible
-customers, reads the account, sends a complete paused Search campaign with `--validate-only`, and
-checks that the same campaign unpaused is refused locally. It is skipped unless you run it with:
+CI (GitHub Actions) runs vet and tests on Linux and macOS, the secret scan, gofmt, the manifest
+drift check and a cross-compile. Pushing a `v*` tag runs GoReleaser, which publishes Linux and macOS
+binaries for amd64 and arm64 to GitHub Releases (`-rc` tags publish as pre-releases).
+
+`e2e/smoke_test.go` drives the real binary against a fake Google. `e2e/live_test.go` runs against a
+real account and changes nothing: it reads the account, dry-runs a complete PAUSED Search campaign
+with `--validate-only`, and checks the local refusals. It is skipped unless you ask for it:
 
 ```sh
 GOOGLE_ADS_LIVE=1 GOOGLE_ADS_LIVE_FINAL_URL=https://your-site.example go test ./e2e -run TestLive -v
 ```
 
-This project follows SemVer. The public API is the command paths, flags, exit codes, the stderr
-error schema and the `googleads commands --json` schema (`schema_version`). New optional keys may
-appear in the catalog under the same `schema_version`, so consumers must ignore keys they do not
-know.
+The public interface (command paths, flags, exit codes, the stderr schema and the
+`commands --json` schema) follows SemVer.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). Original work by wir drei digital; fork changes by the gads-cli
+contributors.

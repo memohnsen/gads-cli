@@ -9,3 +9,10 @@ coverage.out
 
 # Superpowers working artifacts: process scratch, not repo content.
 .superpowers/
+
+# Never commit credentials, token caches or audit logs.
+*.jsonl
+*-key.json
+credentials/
+token.json
+.env

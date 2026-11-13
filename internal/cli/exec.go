@@ -55,7 +55,7 @@ func (a *app) execute(cmd *cobra.Command, x execSpec) error {
 	g := readGateFlags(cmd)
 	start := time.Now()
 	entry := &auditEntry{
-		Time: nowStamp(), Version: Version, APIVersion: a.manifest.APIVersion,
+		Time: nowStamp(), Version: buildVersion(), APIVersion: a.manifest.APIVersion,
 		Command: cmd.CommandPath(), MethodID: x.meth.ID, HTTPMethod: x.req.Method, Path: x.req.Path,
 		CustomerID: customerFromPath(x.req.Path), LoginCustomerID: a.client.LoginCustomerID,
 		RiskClass: x.meth.Risk, Apply: g.apply, ConfirmSpend: g.confirmSpend, ForceAlias: g.forceAlias,
@@ -79,6 +79,10 @@ func (a *app) execute(cmd *cobra.Command, x execSpec) error {
 		ReadOnly: a.res.ReadOnly, CapMicros: a.res.BudgetCapMicros, Unmatched: x.unmatched,
 	})
 	if err != nil {
+		// A gate refusal still knows what the call would have been.
+		if dec.Class != "" {
+			entry.RiskClass, entry.Reasons, entry.Operations = dec.Class, dec.Reasons(), dec.Ops
+		}
 		return refuse(err)
 	}
 	if x.forceRead {

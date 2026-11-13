@@ -1,23 +1,24 @@
 version: 2
-project_name: googleads
+project_name: gads-cli
 
 builds:
   - main: ./cmd/googleads
     binary: googleads
     env: [CGO_ENABLED=0]
-    goos: [linux, darwin, windows]
+    flags: [-trimpath]
+    goos: [linux, darwin]
     goarch: [amd64, arm64]
-    ignore:
-      - goos: windows
-        goarch: arm64
     ldflags:
       - -s -w -X github.com/memohnsen/gads-cli/internal/cli.Version={{.Version}}
 
 archives:
   - formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [LICENSE, README.md, SECURITY.md, docs/agents.md]
 
 checksum:
   name_template: checksums.txt
+
+release:
+  # Tags such as v0.2.0-rc.1 publish as pre-releases.
+  prerelease: auto

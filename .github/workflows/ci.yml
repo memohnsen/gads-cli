@@ -12,14 +12,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version-file: go.mod
       - run: go vet ./...
+      # Includes the e2e smoke test, which drives the built binary against a
+      # local fake Google. The live check (e2e TestLive) needs GOOGLE_ADS_LIVE=1
+      # and real credentials, so it never runs in CI.
       - run: go test ./...
 
   checks:
@@ -28,7 +31,11 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version-file: go.mod
+      - name: no credentials in the tree
+        run: ./scripts/check-secrets.sh
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       # The manifest is embedded, so a spec change that was never regenerated
       # would ship a binary that disagrees with the spec in the same commit.
       - name: manifest drift
@@ -37,6 +44,6 @@ jobs:
         env:
           CGO_ENABLED: "0"
         run: |
-          GOOS=linux  GOARCH=arm64 go build ./cmd/googleads
-          GOOS=darwin GOARCH=arm64 go build ./cmd/googleads
-          GOOS=windows GOARCH=amd64 go build ./cmd/googleads
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/googleads
+          done

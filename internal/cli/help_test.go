@@ -24,7 +24,7 @@ func TestHelpShowsResourceFieldsAndExample(t *testing.T) {
 		"id int64 as string (read-only)",
 		"networkSettings Campaign_NetworkSettings",
 		`Example body:`, `{"operations":[{"create":{}}]}`,
-		"--validate-only",
+		"--validate-only", "unless --apply", "--apply --confirm-spend",
 	} {
 		if !strings.Contains(h, want) {
 			t.Errorf("help lacks %q:\n%s", want, h)
