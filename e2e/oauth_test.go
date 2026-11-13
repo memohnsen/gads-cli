@@ -156,9 +156,21 @@ func TestUserOAuthSmoke(t *testing.T) {
 
 	// Only the two stored credentials may hold the secrets: not the config
 	// file, the token cache or the audit log.
-	credDir := filepath.Join(home, "config", "gads", "credentials")
+	// The config dir is OS-specific (~/Library/Application Support on macOS
+	// ignores XDG_CONFIG_HOME), so find gads/credentials wherever it is.
+	isCredDir := func(dir string) bool {
+		return filepath.Base(dir) == "credentials" && filepath.Base(filepath.Dir(dir)) == "gads"
+	}
+	stored := map[string]bool{}
 	filepath.WalkDir(home, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || filepath.Dir(p) == credDir {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if isCredDir(filepath.Dir(p)) {
+			if fi, err := os.Stat(p); err != nil || fi.Mode().Perm() != 0o600 {
+				t.Errorf("%s: %v %v", p, err, fi)
+			}
+			stored[filepath.Base(p)] = true
 			return nil
 		}
 		b, _ := os.ReadFile(p)
@@ -167,12 +179,8 @@ func TestUserOAuthSmoke(t *testing.T) {
 		}
 		return nil
 	})
-	for _, role := range []string{"reader", "writer"} {
-		p := filepath.Join(credDir, role+".json")
-		fi, err := os.Stat(p)
-		if err != nil || fi.Mode().Perm() != 0o600 {
-			t.Fatalf("%s: %v %v", p, err, fi)
-		}
+	if !stored["reader.json"] || !stored["writer.json"] {
+		t.Fatalf("stored credentials %v, want reader.json and writer.json", stored)
 	}
 }
 
