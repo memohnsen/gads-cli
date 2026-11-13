@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -15,7 +16,7 @@ var (
 // realDiscovery loads the vendored document once per test binary.
 func realDiscovery(t *testing.T) *Discovery {
 	t.Helper()
-	realOnce.Do(func() { realDoc, realErr = LoadDiscovery("../../spec/googleads-v25.discovery.json") })
+	realOnce.Do(func() { realDoc, realErr = LoadDiscovery(vendoredSpecPath) })
 	if realErr != nil {
 		t.Fatal(realErr)
 	}
@@ -35,7 +36,7 @@ func methodDef(t *testing.T, d *Discovery, id string) MethodDef {
 
 func TestLoadDiscovery(t *testing.T) {
 	d := realDiscovery(t)
-	if d.Version != "v25" || d.Revision == "" {
+	if !regexp.MustCompile(`^v[0-9]+$`).MatchString(d.Version) || d.Revision == "" {
 		t.Fatalf("version %q revision %q", d.Version, d.Revision)
 	}
 	all := d.AllMethods()
@@ -68,7 +69,9 @@ func TestStripMarkersAndFirstSentence(t *testing.T) {
 }
 
 func TestSummarizeCampaign(t *testing.T) {
-	s := SummarizeSchemas(realDiscovery(t))["GoogleAdsGoogleadsV25Resources__Campaign"]
+	d := realDiscovery(t)
+	prefix := "GoogleAdsGoogleads" + strings.ToUpper(d.Version[:1]) + d.Version[1:]
+	s := SummarizeSchemas(d)[prefix+"Resources__Campaign"]
 	byName := map[string]int{}
 	for i, f := range s.Fields {
 		byName[f.Name] = i
@@ -83,7 +86,7 @@ func TestSummarizeCampaign(t *testing.T) {
 	if rn := s.Fields[byName["resourceName"]]; !rn.Immutable || strings.HasPrefix(rn.Doc, "Immutable") {
 		t.Fatalf("resourceName %+v", rn)
 	}
-	if ns := s.Fields[byName["networkSettings"]]; ns.Type != "object" || ns.Ref != "GoogleAdsGoogleadsV25Resources_Campaign_NetworkSettings" {
+	if ns := s.Fields[byName["networkSettings"]]; ns.Type != "object" || ns.Ref != prefix+"Resources_Campaign_NetworkSettings" {
 		t.Fatalf("networkSettings %+v", ns)
 	}
 	for i := 1; i < len(s.Fields); i++ {
@@ -116,4 +119,22 @@ func contains(xs []string, x string) bool {
 		}
 	}
 	return false
+}
+
+// vendoredSpecPath is the one Discovery document in spec/, whatever its version.
+var vendoredSpecPath = func() string {
+	p, err := VendoredSpec("../../spec")
+	if err != nil {
+		return "../../spec/missing.discovery.json"
+	}
+	return p
+}()
+
+func mustVendoredSpec(t *testing.T) string {
+	t.Helper()
+	p, err := VendoredSpec("../../spec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

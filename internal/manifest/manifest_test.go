@@ -24,23 +24,23 @@ func gz(t *testing.T, v any) []byte {
 
 func testManifest() *Manifest {
 	return &Manifest{
-		SchemaVersion: SchemaVersion, APIVersion: "v25",
+		SchemaVersion: SchemaVersion, APIVersion: "v26",
 		Methods: []Method{
-			{ID: "customers.campaigns.mutate", HTTPMethod: "POST", Path: "v25/customers/{+customerId}/campaigns:mutate",
+			{ID: "customers.campaigns.mutate", HTTPMethod: "POST", Path: "v26/customers/{+customerId}/campaigns:mutate",
 				PathParams: []Param{{Name: "customerId", Pattern: "^[^/]+$"}}},
-			{ID: "customers.operations.list", HTTPMethod: "GET", Path: "v25/{+name}",
+			{ID: "customers.operations.list", HTTPMethod: "GET", Path: "v26/{+name}",
 				PathParams: []Param{{Name: "name", Pattern: "^customers/[^/]+/operations$"}}},
-			{ID: "customers.operations.get", HTTPMethod: "GET", Path: "v25/{+name}",
+			{ID: "customers.operations.get", HTTPMethod: "GET", Path: "v26/{+name}",
 				PathParams: []Param{{Name: "name", Pattern: "^customers/[^/]+/operations/[^/]+$"}}},
-			{ID: "customers.batchJobs.run", HTTPMethod: "POST", Path: "v25/{+resourceName}:run",
+			{ID: "customers.batchJobs.run", HTTPMethod: "POST", Path: "v26/{+resourceName}:run",
 				PathParams: []Param{{Name: "resourceName", Pattern: "^customers/[^/]+/batchJobs/[^/]+$"}}},
-			{ID: "customers.listAccessibleCustomers", HTTPMethod: "GET", Path: "v25/customers:listAccessibleCustomers"},
+			{ID: "customers.listAccessibleCustomers", HTTPMethod: "GET", Path: "v26/customers:listAccessibleCustomers"},
 		},
 		Schemas: map[string]Schema{
-			"GoogleAdsGoogleadsV25Resources__Campaign":                {},
-			"GoogleAdsGoogleadsV25Resources_Campaign_NetworkSettings": {},
-			"GoogleAdsGoogleadsV25Services__Thing":                    {},
-			"GoogleAdsGoogleadsV25Resources__Thing":                   {},
+			"GoogleAdsGoogleadsV26Resources__Campaign":                {},
+			"GoogleAdsGoogleadsV26Resources_Campaign_NetworkSettings": {},
+			"GoogleAdsGoogleadsV26Services__Thing":                    {},
+			"GoogleAdsGoogleadsV26Resources__Thing":                   {},
 			"GoogleLongrunning__Operation":                            {},
 		},
 	}
@@ -52,7 +52,7 @@ func TestParseRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(got.Methods, m.Methods) || got.APIVersion != "v25" {
+	if !reflect.DeepEqual(got.Methods, m.Methods) || got.APIVersion != "v26" {
 		t.Fatalf("round trip lost data: %+v", got)
 	}
 }
@@ -77,18 +77,18 @@ func TestByID(t *testing.T) {
 func TestFind(t *testing.T) {
 	m := testManifest()
 	cases := []struct{ method, path, want string }{
-		{"POST", "v25/customers/1234567890/campaigns:mutate", "customers.campaigns.mutate"},
-		{"POST", "/v25/customers/1234567890/campaigns:mutate", "customers.campaigns.mutate"},
+		{"POST", "v26/customers/1234567890/campaigns:mutate", "customers.campaigns.mutate"},
+		{"POST", "/v26/customers/1234567890/campaigns:mutate", "customers.campaigns.mutate"},
 		// another API version maps onto this version's method
 		{"POST", "v24/customers/1234567890/campaigns:mutate", "customers.campaigns.mutate"},
 		// the Discovery pattern tells list and get apart on the same template
-		{"GET", "v25/customers/1/operations", "customers.operations.list"},
-		{"GET", "v25/customers/1/operations/abc", "customers.operations.get"},
-		{"POST", "v25/customers/1/batchJobs/7:run", "customers.batchJobs.run"},
-		{"GET", "v25/customers:listAccessibleCustomers", "customers.listAccessibleCustomers"},
-		{"GET", "v25/customers/1234567890/campaigns:mutate", ""}, // wrong HTTP method
-		{"POST", "v25/customers/1/unknown:mutate", ""},
-		{"POST", "v25/customers/1/batchJobs/7/extra:run", ""},
+		{"GET", "v26/customers/1/operations", "customers.operations.list"},
+		{"GET", "v26/customers/1/operations/abc", "customers.operations.get"},
+		{"POST", "v26/customers/1/batchJobs/7:run", "customers.batchJobs.run"},
+		{"GET", "v26/customers:listAccessibleCustomers", "customers.listAccessibleCustomers"},
+		{"GET", "v26/customers/1234567890/campaigns:mutate", ""}, // wrong HTTP method
+		{"POST", "v26/customers/1/unknown:mutate", ""},
+		{"POST", "v26/customers/1/batchJobs/7/extra:run", ""},
 	}
 	for _, c := range cases {
 		got := m.Find(c.method, c.path)
@@ -104,10 +104,10 @@ func TestFind(t *testing.T) {
 
 func TestShortName(t *testing.T) {
 	cases := map[string]string{
-		"GoogleAdsGoogleadsV25Resources__Campaign":                "Campaign",
-		"GoogleAdsGoogleadsV25Resources_Campaign_NetworkSettings": "Campaign_NetworkSettings",
-		"GoogleAdsGoogleadsV25Common__ResponsiveSearchAdInfo":     "ResponsiveSearchAdInfo",
-		"GoogleAdsGoogleadsV25Services__MutateOperation":          "MutateOperation",
+		"GoogleAdsGoogleadsV26Resources__Campaign":                "Campaign",
+		"GoogleAdsGoogleadsV26Resources_Campaign_NetworkSettings": "Campaign_NetworkSettings",
+		"GoogleAdsGoogleadsV26Common__ResponsiveSearchAdInfo":     "ResponsiveSearchAdInfo",
+		"GoogleAdsGoogleadsV26Services__MutateOperation":          "MutateOperation",
 		"GoogleLongrunning__Operation":                            "GoogleLongrunning__Operation",
 	}
 	for in, want := range cases {
@@ -119,13 +119,13 @@ func TestShortName(t *testing.T) {
 
 func TestLookupSchema(t *testing.T) {
 	m := testManifest()
-	if id, _ := m.LookupSchema("Campaign"); id != "GoogleAdsGoogleadsV25Resources__Campaign" {
+	if id, _ := m.LookupSchema("Campaign"); id != "GoogleAdsGoogleadsV26Resources__Campaign" {
 		t.Fatalf("short name: %q", id)
 	}
-	if id, _ := m.LookupSchema("Campaign_NetworkSettings"); id != "GoogleAdsGoogleadsV25Resources_Campaign_NetworkSettings" {
+	if id, _ := m.LookupSchema("Campaign_NetworkSettings"); id != "GoogleAdsGoogleadsV26Resources_Campaign_NetworkSettings" {
 		t.Fatalf("nested short name: %q", id)
 	}
-	if id, _ := m.LookupSchema("GoogleAdsGoogleadsV25Services__Thing"); id != "GoogleAdsGoogleadsV25Services__Thing" {
+	if id, _ := m.LookupSchema("GoogleAdsGoogleadsV26Services__Thing"); id != "GoogleAdsGoogleadsV26Services__Thing" {
 		t.Fatalf("full name: %q", id)
 	}
 	id, cands := m.LookupSchema("Thing")
@@ -142,11 +142,11 @@ func TestRiskRankAndForce(t *testing.T) {
 		t.Fatal("rank order")
 	}
 	for _, r := range []string{RiskDelete, RiskSpend, RiskAdmin} {
-		if !NeedsForce(r) || RiskRank(r) != RiskRank(RiskSpend) {
+		if !NeedsConfirm(r) || RiskRank(r) != RiskRank(RiskSpend) {
 			t.Fatalf("%s must need --force at the top rank", r)
 		}
 	}
-	if NeedsForce(RiskRead) || NeedsForce(RiskWrite) {
+	if NeedsConfirm(RiskRead) || NeedsConfirm(RiskWrite) {
 		t.Fatal("read and write need no --force")
 	}
 }

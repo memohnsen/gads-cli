@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/config"
 )
 
 func help(t *testing.T, args ...string) string {
@@ -19,12 +19,12 @@ func help(t *testing.T, args ...string) string {
 func TestHelpShowsResourceFieldsAndExample(t *testing.T) {
 	h := help(t, "campaigns", "mutate")
 	for _, want := range []string{
-		"POST v25/customers/{+customerId}/campaigns:mutate (risk: write)",
+		"POST v26/customers/{+customerId}/campaigns:mutate (risk: write)",
 		"status string (one of: ENABLED, PAUSED, REMOVED): The status of the campaign.",
 		"id int64 as string (read-only)",
 		"networkSettings Campaign_NetworkSettings",
 		`Example body:`, `{"operations":[{"create":{}}]}`,
-		"--validate-only",
+		"--validate-only", "unless --apply", "--apply --confirm-spend",
 	} {
 		if !strings.Contains(h, want) {
 			t.Errorf("help lacks %q:\n%s", want, h)

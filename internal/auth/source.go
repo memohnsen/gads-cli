@@ -14,7 +14,8 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/jwt"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/config"
 )
 
 // Source mints and caches access tokens for one key.
@@ -152,7 +153,7 @@ func (s *Source) cachePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "googleads", "token.json"), nil
+	return filepath.Join(dir, config.AppDir, "token.json"), nil
 }
 
 // readCache returns the cached entries; a missing or corrupt cache is empty.

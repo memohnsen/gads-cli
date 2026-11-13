@@ -50,6 +50,7 @@ campaign-labels mutate	customers.campaignLabels.mutate	write
 campaign-shared-sets mutate	customers.campaignSharedSets.mutate	write
 campaigns enable-pmax-brand-guidelines	customers.campaigns.enablePMaxBrandGuidelines	write
 campaigns mutate	customers.campaigns.mutate	write
+check-local-services-eligibility	customers.checkLocalServicesEligibility	read
 conversion-actions mutate	customers.conversionActions.mutate	write
 conversion-custom-variables mutate	customers.conversionCustomVariables.mutate	write
 conversion-goal-campaign-configs mutate	customers.conversionGoalCampaignConfigs.mutate	write
@@ -62,6 +63,7 @@ custom-interests mutate	customers.customInterests.mutate	write
 customer mutate	customers.mutate	write
 customer-asset-sets mutate	customers.customerAssetSets.mutate	write
 customer-assets mutate	customers.customerAssets.mutate	write
+customer-budget-network-settings mutate	customers.customerBudgetNetworkSettings.mutate	spend
 customer-client-links mutate	customers.customerClientLinks.mutate	admin
 customer-conversion-goals mutate	customers.customerConversionGoals.mutate	write
 customer-customizers mutate	customers.CustomerCustomizers.mutate	write

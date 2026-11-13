@@ -18,10 +18,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
-	"github.com/wir-drei-digital/google-ads-cli/internal/auth"
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/auth"
+	"github.com/memohnsen/gads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 type app struct {
@@ -36,6 +36,10 @@ type app struct {
 	stdin          io.Reader
 	// cacheDir locates the token cache; nil means os.UserCacheDir.
 	cacheDir func() (string, error)
+	// keys caches the key of each credential role once loaded.
+	keys map[string]*auth.Key
+	// tokenOverride replaces the token source of a role; a test seam.
+	tokenOverride func(role string) func(context.Context) (string, error)
 	// prompt and isTerminal are seams for `init`, the one interactive
 	// command; nil in production, where init uses the real terminal.
 	prompt     prompter
@@ -44,7 +48,7 @@ type app struct {
 
 // Execute is the process entry point: it loads the embedded manifest and the
 // resolved config, runs the command tree and returns the exit code
-// (0 success, 1 API or network failure, 2 usage error).
+// (0 success, 1 API or network failure, 2 usage error or guardrail refusal).
 func Execute(args []string) int {
 	m, err := manifest.Load()
 	if err != nil {
@@ -65,7 +69,7 @@ func (a *app) configure(getenv func(string) string, sleep func(time.Duration)) {
 	a.res, a.configErr = config.Resolve(getenv)
 	a.client = &api.Client{
 		BaseURL: a.res.APIBase, LoginCustomerID: a.res.LoginCustomerID, ReadOnly: a.res.ReadOnly,
-		AllowCustomBase: a.res.AllowCustomBase, TokenSource: a.tokenSource(), Sleep: sleep,
+		AllowCustomBase: a.res.AllowCustomBase, TokenSource: a.tokenSourceFor(config.RoleReader), Sleep: sleep,
 	}
 }
 
@@ -86,23 +90,23 @@ func (a *app) requireConfig(cmd *cobra.Command, args []string) error {
 	return api.Usagef("cannot load the configuration: %v", a.configErr)
 }
 
-// tokenSource loads the key on the first API call, so a missing or broken
-// key file cannot break commands that never call the API. It is nil when no
-// key is configured, which the client reports as a usage error.
-func (a *app) tokenSource() func(context.Context) (string, error) {
-	if a.res.KeySource() == "" {
+// tokenSourceFor returns the token source of one credential role. The key
+// is loaded on the first API call, so a missing or broken key cannot break
+// commands that never call the API. It is nil when the role has no key
+// source, which the client reports as a usage error.
+func (a *app) tokenSourceFor(role string) func(context.Context) (string, error) {
+	if a.tokenOverride != nil {
+		return a.tokenOverride(role)
+	}
+	if !a.res.Credential(role).Configured() {
 		return nil
 	}
-	var src *auth.Source
 	return func(ctx context.Context) (string, error) {
-		if src == nil {
-			key, err := a.loadKey()
-			if err != nil {
-				return "", err
-			}
-			src = a.newSource(key)
+		key, err := a.loadKey(ctx, role)
+		if err != nil {
+			return "", err
 		}
-		return src.Token(ctx)
+		return a.newSource(key).Token(ctx)
 	}
 }
 
@@ -110,23 +114,31 @@ func (a *app) newSource(key *auth.Key) *auth.Source {
 	return &auth.Source{Key: key, TokenURL: a.res.TokenURL, AllowCustomBase: a.res.AllowCustomBase, CacheDir: a.cacheDir}
 }
 
-// loadKey reads and validates the configured key: the file named by
-// GOOGLE_ADS_JSON_KEY_FILE_PATH, else the copy in the config file.
-func (a *app) loadKey() (*auth.Key, error) {
-	raw := a.res.KeyJSON
-	if a.res.KeyPath != "" {
-		b, err := os.ReadFile(a.res.KeyPath)
-		if err != nil {
-			return nil, api.Usagef("reading GOOGLE_ADS_JSON_KEY_FILE_PATH: %v", err)
-		}
-		raw = b
+// loadKey loads and caches the key of role from its configured source.
+func (a *app) loadKey(ctx context.Context, role string) (*auth.Key, error) {
+	if k, ok := a.keys[role]; ok {
+		return k, nil
 	}
-	k, err := auth.ParseKey(raw)
+	k, err := auth.LoadKey(ctx, a.res.Credential(role))
 	if err != nil {
-		return nil, api.Usagef("%v", err)
+		return nil, err
 	}
+	if a.keys == nil {
+		a.keys = map[string]*auth.Key{}
+	}
+	a.keys[role] = k
 	return k, nil
 }
+
+// keyEmail is the client email of a role's key once it has been loaded.
+func (a *app) keyEmail(role string) string {
+	if k, ok := a.keys[role]; ok {
+		return k.ClientEmail
+	}
+	return ""
+}
+
+func credentialHint(role string) string { return auth.SetupHint(role) }
 
 // contextSleeper returns a sleep that gives up as soon as ctx is done.
 func contextSleeper(ctx context.Context) func(time.Duration) {
@@ -154,7 +166,8 @@ func (a *app) runContext(ctx context.Context, args []string) int {
 }
 
 // renderError writes err as one line of JSON on stderr and returns the exit
-// code: 2 for usage errors, 1 for everything the API or the network produced.
+// code: 2 for usage errors and guardrail refusals (nothing was sent), 1 for
+// everything the API or the network produced.
 func (a *app) renderError(err error) int {
 	var apiErr *api.Error
 	if !errors.As(err, &apiErr) {
@@ -168,7 +181,7 @@ func (a *app) renderError(err error) int {
 		}
 	}
 	fmt.Fprintln(a.stderr, string(raw))
-	if apiErr.Kind == api.KindUsage {
+	if apiErr.IsLocal() {
 		return 2
 	}
 	return 1

@@ -7,9 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
-	"github.com/wir-drei-digital/google-ads-cli/internal/guard"
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 var validMethods = map[string]bool{"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true}
@@ -23,12 +22,14 @@ func (a *app) apiCommand() *cobra.Command {
 		Use:   "api <METHOD> <path>",
 		Short: "Raw authenticated request (escape hatch); the guardrails still apply",
 		Long: "Raw authenticated request. The path is relative to https://googleads.googleapis.com/,\n" +
-			"for example v25/customers/1234567890/googleAds:search, without a query string (use --query k=v).\n\n" +
-			"A path that matches a known method, in any API version, inherits its risk class, the payload\n" +
-			"check, the budget cap and the block list. An unmatched POST, PUT, PATCH or DELETE is admin-class\n" +
-			"and needs --force, and every amountMicros or totalAmountMicros anywhere in its body is held to\n" +
-			"the budget cap, which --force does not override. Read-only mode allows GET and read-class\n" +
-			"methods. Authorization, a developer-token header, the method-override headers\n" +
+			"for example v26/customers/1234567890/googleAds:search, without a query string (use --query k=v).\n\n" +
+			"It is not a bypass. A path that matches a known method, in any API version, inherits its risk\n" +
+			"class, the payload check, the budget cap, the block list and the dry-run default: a write is\n" +
+			"sent with validateOnly unless --apply is given, and a gated one needs --apply --confirm-spend.\n" +
+			"An unmatched POST, PUT, PATCH or DELETE is admin-class: it has no known dry run, so it needs\n" +
+			"--apply --confirm-spend, and every amountMicros or totalAmountMicros anywhere in its body is\n" +
+			"held to the budget cap, which no flag overrides. Read-only mode allows GET, read-class methods\n" +
+			"and dry runs. Every write attempt is audited. Authorization, a developer-token header, the method-override headers\n" +
 			"(X-HTTP-Method-Override, X-HTTP-Method, X-Method-Override) and the credential query parameters\n" +
 			"access_token, oauth_token and key cannot be set. GET and DELETE take no --data. Each path\n" +
 			"segment must be non-empty and must not be \".\" or \"..\" or contain %, whitespace or a\n" +
@@ -42,7 +43,7 @@ func (a *app) apiCommand() *cobra.Command {
 			}
 			path := strings.TrimLeft(args[1], "/")
 			if path == "" || strings.ContainsAny(path, "?#") {
-				return api.Usagef("path must be relative, e.g. v25/customers/1234567890/googleAds:search, with no query string (use --query k=v)")
+				return api.Usagef("path must be relative, e.g. v26/customers/1234567890/googleAds:search, with no query string (use --query k=v)")
 			}
 			// Before Find: a spelling Find does not recognise, such as %3A
 			// for ":" or a ".." segment, would otherwise go out as an
@@ -79,33 +80,14 @@ func (a *app) apiCommand() *cobra.Command {
 				}
 				target = &manifest.Method{ID: "raw " + method + " " + path, Command: []string{"api", method, path}, HTTPMethod: method, Risk: risk}
 			}
-			dec, err := guard.Check(a.manifest, target, body, guard.Options{
-				Force: flagBool(cmd, "force"), ReadOnly: a.res.ReadOnly, CapMicros: a.res.BudgetCapMicros,
-				Unmatched: unmatched,
-			})
-			if err != nil {
-				return err
-			}
-			risk := dec.Class
-			if method == "GET" {
-				risk = manifest.RiskRead
-			}
 			if err := a.applyLoginCustomerID(cmd); err != nil {
 				return err
 			}
-			a.applyGlobalFlags(cmd)
-			out, err := openOutput(flagString(cmd, "output"))
-			if err != nil {
-				return err
-			}
-			defer out.discard()
-			resp, err := a.client.Do(cmd.Context(), api.Request{
-				Method: method, Path: path, Query: q, Body: body, Risk: risk, MethodID: target.ID, Headers: hdr,
+			return a.execute(cmd, execSpec{
+				meth: target, unmatched: unmatched, forceRead: method == "GET",
+				canValidate: !unmatched && target.ValidateOnly,
+				req:         &api.Request{Method: method, Path: path, Query: q, Body: body, MethodID: target.ID, Headers: hdr},
 			})
-			if err != nil {
-				return err
-			}
-			return a.writeResponse(resp, out)
 		},
 	}
 	cmd.Flags().String("data", "", "JSON body: literal, @file, or - for stdin")

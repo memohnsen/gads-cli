@@ -9,11 +9,12 @@ import (
 	"encoding/pem"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/config"
 )
 
 // isolate points every per-user directory at a temp dir, so the tests never
@@ -60,9 +61,24 @@ func TestConfigSetServiceAccountKeyFromStdin(t *testing.T) {
 	if code := a.run([]string{"config", "set", "service-account-key"}); code != 0 {
 		t.Fatalf("exit %d %s", code, errb.String())
 	}
-	c, _ := config.Load()
-	if len(c.ServiceAccountKey) == 0 || !strings.Contains(out.String(), "gads@proj.iam.gserviceaccount.com") {
-		t.Fatalf("stored %d bytes, stdout %q", len(c.ServiceAccountKey), out.String())
+	kp, _ := config.CredentialPath("reader")
+	fi, err := os.Stat(kp)
+	if err != nil || (runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600) || !strings.Contains(out.String(), "gads@proj.iam.gserviceaccount.com") {
+		t.Fatalf("stored %v %v, stdout %q", fi, err, out.String())
+	}
+	if strings.Contains(out.String(), "PRIVATE KEY") {
+		t.Fatal("the key must never be echoed")
+	}
+	if raw, _ := os.ReadFile(func() string { p, _ := config.Path(); return p }()); strings.Contains(string(raw), "PRIVATE KEY") {
+		t.Fatal("the config file must never hold a key")
+	}
+	a, _, errb = testApp(t, nil, config.Resolved{})
+	a.stdin = bytes.NewReader(testKeyJSON(t))
+	if code := a.run([]string{"config", "set", "service-account-key", "--role", "writer"}); code != 0 {
+		t.Fatalf("writer: exit %d %s", code, errb.String())
+	}
+	if wp, _ := config.CredentialPath("writer"); func() bool { _, err := os.Stat(wp); return err != nil }() {
+		t.Fatal("writer key not stored")
 	}
 	a, _, _ = testApp(t, nil, config.Resolved{})
 	if code := a.run([]string{"config", "set", "service-account-key", "secret-from-argv"}); code != 2 {
@@ -124,8 +140,33 @@ func TestConfigUnsetAndPath(t *testing.T) {
 	}
 	a, out, _ = testApp(t, nil, config.Resolved{})
 	a.run([]string{"config", "path"})
-	if !strings.HasSuffix(strings.TrimSpace(out.String()), filepath.Join("googleads", "config.json")) {
+	if !strings.HasSuffix(strings.TrimSpace(out.String()), filepath.Join("gads", "config.json")) {
 		t.Fatalf("%q", out.String())
+	}
+}
+
+func TestConfigReadOnlyAndOpRef(t *testing.T) {
+	isolate(t)
+	a, _, _ := testApp(t, nil, config.Resolved{})
+	a.run([]string{"config", "set", "read-only", "false"})
+	a, _, _ = testApp(t, nil, config.Resolved{})
+	a.run([]string{"config", "set", "op-ref", "--role", "writer", "op://Vault/w/credential"})
+	c, _ := config.Load()
+	if c.ReadOnly == nil || *c.ReadOnly || c.OpWriterRef != "op://Vault/w/credential" || c.OpReaderRef != "" {
+		t.Fatalf("%+v", c)
+	}
+	a, _, _ = testApp(t, nil, config.Resolved{})
+	if code := a.run([]string{"config", "set", "op-ref", "not-a-ref"}); code != 2 {
+		t.Fatalf("exit %d", code)
+	}
+	a, _, _ = testApp(t, nil, config.Resolved{})
+	a.run([]string{"config", "unset", "read-only"})
+	if c, _ := config.Load(); c.ReadOnly != nil {
+		t.Fatalf("unset must return to the default: %+v", c)
+	}
+	r, _ := config.Resolve(func(string) string { return "" })
+	if !r.ReadOnly || r.Writer.Source != config.SourceOp {
+		t.Fatalf("%+v", r)
 	}
 }
 

@@ -1,10 +1,11 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 var testResults = map[string]string{"customers.operations.list": "operations"}
@@ -21,7 +22,7 @@ func build(t *testing.T, id string) manifest.Method {
 
 func TestBuildCampaignsMutate(t *testing.T) {
 	m := build(t, "customers.campaigns.mutate")
-	if m.Path != "v25/customers/{+customerId}/campaigns:mutate" || m.HTTPMethod != "POST" || !m.NeedsCustomer {
+	if !regexp.MustCompile(`^v[0-9]+/customers/\{\+customerId\}/campaigns:mutate$`).MatchString(m.Path) || m.HTTPMethod != "POST" || !m.NeedsCustomer {
 		t.Fatalf("%+v", m)
 	}
 	if !m.ValidateOnly || !m.PartialFailure || m.Paging != manifest.PagingNone {

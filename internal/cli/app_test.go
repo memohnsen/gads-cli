@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 // testManifest is a small hand-built manifest with every shape the CLI handles.
@@ -27,42 +27,42 @@ func testManifest() *manifest.Manifest {
 	}
 	cid := manifest.Param{Name: "customerId", Type: "string", Required: true, Pattern: "^[^/]+$"}
 	return &manifest.Manifest{
-		SchemaVersion: 1, APIVersion: "v25", DiscoveryRevision: "20260923",
+		SchemaVersion: 1, APIVersion: "v26", DiscoveryRevision: "20260923",
 		Methods: []manifest.Method{
 			{Command: []string{"search"}, ID: "customers.googleAds.search", HTTPMethod: "POST",
-				Path: "v25/customers/{+customerId}/googleAds:search", Risk: "read", NeedsCustomer: true,
+				Path: "v26/customers/{+customerId}/googleAds:search", Risk: "read", NeedsCustomer: true,
 				PathParams: []manifest.Param{cid}, Request: "SearchRequest", ValidateOnly: true,
 				Paging: manifest.PagingBodyToken, ResultsField: "results", Description: "Returns all rows that match the search query."},
 			{Command: []string{"mutate"}, ID: "customers.googleAds.mutate", HTTPMethod: "POST",
-				Path: "v25/customers/{+customerId}/googleAds:mutate", Risk: "write", NeedsCustomer: true,
+				Path: "v26/customers/{+customerId}/googleAds:mutate", Risk: "write", NeedsCustomer: true,
 				PathParams: []manifest.Param{cid}, Request: "MutateGoogleAdsRequest", ValidateOnly: true, PartialFailure: true,
 				Paging: manifest.PagingNone, Mutate: mut("mutateOperations", "")},
 			{Command: []string{"campaigns", "mutate"}, ID: "customers.campaigns.mutate", HTTPMethod: "POST",
-				Path: "v25/customers/{+customerId}/campaigns:mutate", Risk: "write", NeedsCustomer: true,
+				Path: "v26/customers/{+customerId}/campaigns:mutate", Risk: "write", NeedsCustomer: true,
 				PathParams: []manifest.Param{cid}, Request: "MutateCampaignsRequest", ValidateOnly: true, PartialFailure: true,
 				Paging: manifest.PagingNone, Mutate: mut("operations", "Campaign")},
 			{Command: []string{"campaign-budgets", "mutate"}, ID: "customers.campaignBudgets.mutate", HTTPMethod: "POST",
-				Path: "v25/customers/{+customerId}/campaignBudgets:mutate", Risk: "write", NeedsCustomer: true,
+				Path: "v26/customers/{+customerId}/campaignBudgets:mutate", Risk: "write", NeedsCustomer: true,
 				PathParams: []manifest.Param{cid}, Request: "MutateCampaignBudgetsRequest", ValidateOnly: true, PartialFailure: true,
 				Paging: manifest.PagingNone, Mutate: mut("operations", "CampaignBudget")},
-			{Command: []string{"operations", "list"}, ID: "customers.operations.list", HTTPMethod: "GET", Path: "v25/{+name}",
+			{Command: []string{"operations", "list"}, ID: "customers.operations.list", HTTPMethod: "GET", Path: "v26/{+name}",
 				Risk: "read", PathParams: []manifest.Param{{Name: "name", Type: "string", Required: true, Pattern: "^customers/[^/]+/operations$"}},
 				QueryParams: []manifest.Param{{Name: "pageSize", Type: "integer"}, {Name: "pageToken", Type: "string"}},
 				Paging:      manifest.PagingQueryToken, ResultsField: "operations"},
 			{Command: []string{"recommendations", "apply"}, ID: "customers.recommendations.apply", HTTPMethod: "POST",
-				Path: "v25/customers/{+customerId}/recommendations:apply", Risk: "spend", Blocked: "applies amounts Google chooses",
+				Path: "v26/customers/{+customerId}/recommendations:apply", Risk: "spend", Blocked: "applies amounts Google chooses",
 				NeedsCustomer: true, PathParams: []manifest.Param{cid}, Request: "ApplyRecommendationRequest", Paging: manifest.PagingNone},
 			{Command: []string{"list-accessible-customers"}, ID: "customers.listAccessibleCustomers", HTTPMethod: "GET",
-				Path: "v25/customers:listAccessibleCustomers", Risk: "read", Paging: manifest.PagingNone},
+				Path: "v26/customers:listAccessibleCustomers", Risk: "read", Paging: manifest.PagingNone},
 		},
 		Schemas: map[string]manifest.Schema{
-			"GoogleAdsGoogleadsV25Resources__Campaign": {Fields: []manifest.Field{
+			"GoogleAdsGoogleadsV26Resources__Campaign": {Fields: []manifest.Field{
 				{Name: "id", Type: "string", Format: "int64", ReadOnly: true, Doc: "The ID of the campaign."},
 				{Name: "name", Type: "string", Doc: "The name of the campaign."},
-				{Name: "networkSettings", Type: "object", Ref: "GoogleAdsGoogleadsV25Resources_Campaign_NetworkSettings"},
+				{Name: "networkSettings", Type: "object", Ref: "GoogleAdsGoogleadsV26Resources_Campaign_NetworkSettings"},
 				{Name: "status", Type: "string", Enum: []string{"UNSPECIFIED", "UNKNOWN", "ENABLED", "PAUSED", "REMOVED"}, Doc: "The status of the campaign."},
 			}},
-			"GoogleAdsGoogleadsV25Resources_Campaign_NetworkSettings": {Fields: []manifest.Field{{Name: "targetGoogleSearch", Type: "boolean"}}},
+			"GoogleAdsGoogleadsV26Resources_Campaign_NetworkSettings": {Fields: []manifest.Field{{Name: "targetGoogleSearch", Type: "boolean"}}},
 			"SearchRequest": {Fields: []manifest.Field{{Name: "pageToken", Type: "string"}, {Name: "query", Type: "string", Required: true}}},
 		},
 		GenericOperations: map[string]string{"campaignOperation": "customers.campaigns.mutate"},
@@ -100,6 +100,9 @@ func reply(body string) func(http.ResponseWriter, *http.Request, string) {
 	return func(w http.ResponseWriter, r *http.Request, _ string) { w.Write([]byte(body)) }
 }
 
+// testApp builds an app against srv. Unless the test configures them, both
+// credential roles count as configured and hand out the token "tok-<role>",
+// and the audit log goes to a temp file (auditPath reads it back).
 func testApp(t *testing.T, srv *fakeServer, res config.Resolved) (*app, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	var out, errb bytes.Buffer
@@ -107,10 +110,54 @@ func testApp(t *testing.T, srv *fakeServer, res config.Resolved) (*app, *bytes.B
 	if srv != nil {
 		base = srv.URL
 	}
+	if res.AuditLog == "" {
+		res.AuditLog = filepath.Join(t.TempDir(), "state", "mutations.jsonl")
+	}
+	if res.DryRunCredential == "" {
+		res.DryRunCredential = config.RoleReader
+	}
+	for _, c := range []*config.Credential{&res.Reader, &res.Writer} {
+		if c.Source == "" && c.Role != "none" {
+			c.Source = "test"
+		}
+		if c.Role == "none" {
+			c.Role = ""
+		}
+	}
 	a := &app{manifest: testManifest(), res: res, stdout: &out, stderr: &errb, stdin: strings.NewReader("")}
-	a.client = &api.Client{BaseURL: base, AllowCustomBase: true, TokenSource: api.StaticToken("tok"),
+	a.client = &api.Client{BaseURL: base, AllowCustomBase: true, TokenSource: api.StaticToken("tok-reader"),
 		ReadOnly: res.ReadOnly, LoginCustomerID: res.LoginCustomerID, Sleep: func(time.Duration) {}}
+	a.tokenOverride = func(role string) func(context.Context) (string, error) {
+		if !a.res.Credential(role).Configured() {
+			return nil
+		}
+		return api.StaticToken("tok-" + role)
+	}
 	return a, &out, &errb
+}
+
+// noCredential marks a role as unconfigured for testApp.
+var noCredential = config.Credential{Role: "none"}
+
+// auditLines reads the audit log of a.
+func auditLines(t *testing.T, a *app) []map[string]any {
+	t.Helper()
+	raw, err := os.ReadFile(a.res.AuditLog)
+	if err != nil {
+		return nil
+	}
+	var out []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		if line == "" {
+			continue
+		}
+		var m map[string]any
+		if err := json.Unmarshal([]byte(line), &m); err != nil {
+			t.Fatalf("audit line is not JSON: %q", line)
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 func errJSON(t *testing.T, errb *bytes.Buffer) map[string]any {
@@ -138,7 +185,7 @@ const pausedCampaign = `{"operations":[{"create":{"name":"x","status":"PAUSED"}}
 
 func TestVersion(t *testing.T) {
 	a, out, _ := testApp(t, nil, config.Resolved{})
-	if code := a.run([]string{"version"}); code != 0 || !strings.Contains(out.String(), "Google Ads API v25") {
+	if code := a.run([]string{"version"}); code != 0 || !strings.Contains(out.String(), "Google Ads API v26") {
 		t.Fatalf("exit %d out %q", code, out.String())
 	}
 }
@@ -159,7 +206,7 @@ func TestCustomerIDFlagWithDashes(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errb.String())
 	}
-	if srv.uris[0] != "/v25/customers/1234567890/googleAds:search" {
+	if srv.uris[0] != "/v26/customers/1234567890/googleAds:search" {
 		t.Fatalf("uri %q", srv.uris[0])
 	}
 	if srv.bodies[0] != `{"query":"SELECT customer.id FROM customer WHERE metrics.clicks > 0"}` {
@@ -173,7 +220,7 @@ func TestCustomerIDFlagWithDashes(t *testing.T) {
 func TestCustomerFromConfigAndMissingCustomer(t *testing.T) {
 	srv := newFakeServer(t, reply(`{}`))
 	a, _, _ := testApp(t, srv, config.Resolved{CustomerID: "1112223333"})
-	if code := a.run([]string{"search", "--query", "SELECT customer.id FROM customer"}); code != 0 || srv.uris[0] != "/v25/customers/1112223333/googleAds:search" {
+	if code := a.run([]string{"search", "--query", "SELECT customer.id FROM customer"}); code != 0 || srv.uris[0] != "/v26/customers/1112223333/googleAds:search" {
 		t.Fatalf("exit %d uris %v", code, srv.uris)
 	}
 	a, _, errb := testApp(t, srv, config.Resolved{})
@@ -208,7 +255,7 @@ func TestDataFileWithUTF8BOMAccepted(t *testing.T) {
 	srv := newFakeServer(t, reply(`{"results":[]}`))
 	p := writeFile(t, "body.json", append([]byte{0xEF, 0xBB, 0xBF}, []byte(pausedCampaign)...))
 	a, _, errb := testApp(t, srv, config.Resolved{CustomerID: "1234567890"})
-	if code := a.run([]string{"campaigns", "mutate", "--data", "@" + p}); code != 0 {
+	if code := a.run([]string{"campaigns", "mutate", "--apply", "--data", "@" + p}); code != 0 {
 		t.Fatalf("exit %d: %s", code, errb.String())
 	}
 	if srv.bodies[0] != pausedCampaign {
@@ -227,24 +274,10 @@ func TestDataFileUTF16Refused(t *testing.T) {
 	}
 }
 
-func TestSpendNeedsForceAndNeverReachesTheNetwork(t *testing.T) {
-	srv := newFakeServer(t, reply(`{"results":[{}]}`))
-	enable := `{"operations":[{"create":{"name":"x"}}]}`
-	a, _, errb := testApp(t, srv, config.Resolved{CustomerID: "1234567890"})
-	code := a.run([]string{"campaigns", "mutate", "--data", enable})
-	if code != 2 || !strings.Contains(errJSON(t, errb)["error"].(string), "PAUSED") || srv.hits.Load() != 0 {
-		t.Fatalf("exit %d stderr %q hits %d", code, errb.String(), srv.hits.Load())
-	}
-	a, _, errb = testApp(t, srv, config.Resolved{CustomerID: "1234567890"})
-	if code := a.run([]string{"campaigns", "mutate", "--data", enable, "--force"}); code != 0 || srv.hits.Load() != 1 {
-		t.Fatalf("forced: exit %d stderr %q", code, errb.String())
-	}
-}
-
-func TestValidateOnlySetsTheFieldAndSkipsForce(t *testing.T) {
+func TestValidateOnlyReplacesTheBodyField(t *testing.T) {
 	srv := newFakeServer(t, reply(`{}`))
 	a, _, errb := testApp(t, srv, config.Resolved{CustomerID: "1234567890"})
-	code := a.run([]string{"campaigns", "mutate", "--validate-only", "--data", `{"validate_only":false,"operations":[{"create":{"name":"x"}}]}`})
+	code := a.run([]string{"campaigns", "mutate", "--validate-only", "--data", `{"validate_only":false,"operations":[{"create":{"name":"x","status":"PAUSED"}}]}`})
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errb.String())
 	}
@@ -255,9 +288,9 @@ func TestValidateOnlySetsTheFieldAndSkipsForce(t *testing.T) {
 }
 
 func TestPartialFailureExitsOneWithTheResponseOnStdout(t *testing.T) {
-	srv := newFakeServer(t, reply(`{"results":[{}],"partialFailureError":{"code":3,"message":"Multiple errors in details.","details":[{"@type":"type.googleapis.com/google.ads.googleads.v25.errors.GoogleAdsFailure","errors":[{"errorCode":{"fieldError":"REQUIRED"},"message":"The required field was not present."}]}]}}`))
+	srv := newFakeServer(t, reply(`{"results":[{}],"partialFailureError":{"code":3,"message":"Multiple errors in details.","details":[{"@type":"type.googleapis.com/google.ads.googleads.v26.errors.GoogleAdsFailure","errors":[{"errorCode":{"fieldError":"REQUIRED"},"message":"The required field was not present."}]}]}}`))
 	a, out, errb := testApp(t, srv, config.Resolved{CustomerID: "1234567890"})
-	code := a.run([]string{"campaigns", "mutate", "--partial-failure", "--data", pausedCampaign})
+	code := a.run([]string{"campaigns", "mutate", "--apply", "--partial-failure", "--data", pausedCampaign})
 	if code != 1 || errJSON(t, errb)["kind"] != "partial_failure" || !strings.Contains(out.String(), "partialFailureError") {
 		t.Fatalf("exit %d stdout %q stderr %q", code, out.String(), errb.String())
 	}
@@ -275,16 +308,18 @@ func TestBlockedMethodRefused(t *testing.T) {
 	}
 }
 
-func TestReadOnlyAllowsValidateOnly(t *testing.T) {
+func TestReadOnlyAllowsDryRuns(t *testing.T) {
 	srv := newFakeServer(t, reply(`{}`))
 	res := config.Resolved{CustomerID: "1234567890", ReadOnly: true}
-	a, _, _ := testApp(t, srv, res)
-	if code := a.run([]string{"campaigns", "mutate", "--data", pausedCampaign}); code != 2 {
-		t.Fatalf("read-only write: exit %d", code)
-	}
 	a, _, errb := testApp(t, srv, res)
-	if code := a.run([]string{"campaigns", "mutate", "--validate-only", "--data", pausedCampaign}); code != 0 {
-		t.Fatalf("read-only validate-only: exit %d %s", code, errb.String())
+	if code := a.run([]string{"campaigns", "mutate", "--apply", "--data", pausedCampaign}); code != 2 || errJSON(t, errb)["kind"] != "guardrail" || srv.hits.Load() != 0 {
+		t.Fatalf("read-only apply: exit %d %s", code, errb.String())
+	}
+	for _, flags := range [][]string{nil, {"--validate-only"}} {
+		a, _, errb := testApp(t, srv, res)
+		if code := a.run(append([]string{"campaigns", "mutate", "--data", pausedCampaign}, flags...)); code != 0 {
+			t.Fatalf("read-only dry run %v: exit %d %s", flags, code, errb.String())
+		}
 	}
 }
 
@@ -317,7 +352,7 @@ func TestAllQueryTokenMerges(t *testing.T) {
 	if code := a.run([]string{"operations", "list", "customers/1234567890/operations", "--all"}); code != 0 {
 		t.Fatalf("exit %d: %s", code, errb.String())
 	}
-	if out.String() != `[{"name":"a"},{"name":"b"}]`+"\n" || !strings.HasPrefix(srv.uris[0], "/v25/customers/1234567890/operations") {
+	if out.String() != `[{"name":"a"},{"name":"b"}]`+"\n" || !strings.HasPrefix(srv.uris[0], "/v26/customers/1234567890/operations") {
 		t.Fatalf("stdout %q uris %v", out.String(), srv.uris)
 	}
 }
@@ -365,7 +400,7 @@ func TestLoginCustomerIDFlagSetsHeader(t *testing.T) {
 func TestTopLevelLeafCommand(t *testing.T) {
 	srv := newFakeServer(t, reply(`{"resourceNames":["customers/1234567890"]}`))
 	a, out, errb := testApp(t, srv, config.Resolved{})
-	if code := a.run([]string{"list-accessible-customers"}); code != 0 || srv.uris[0] != "/v25/customers:listAccessibleCustomers" {
+	if code := a.run([]string{"list-accessible-customers"}); code != 0 || srv.uris[0] != "/v26/customers:listAccessibleCustomers" {
 		t.Fatalf("exit %d uris %v %s", code, srv.uris, errb.String())
 	}
 	if !strings.Contains(out.String(), "customers/1234567890") {
@@ -389,20 +424,22 @@ func TestAPIErrorIsOneJSONLine(t *testing.T) {
 	}
 }
 
-func TestValidateOnlyOfferedOnlyWhereTheManifestSaysSo(t *testing.T) {
+func TestGateFlagsLeaveReadsAlone(t *testing.T) {
 	srv := newFakeServer(t, reply(`{}`))
 	for _, args := range [][]string{
 		{"list-accessible-customers", "--validate-only"},
-		{"operations", "list", "customers/1234567890/operations", "--validate-only"},
+		{"operations", "list", "customers/1234567890/operations", "--apply"},
 	} {
-		a, _, errb := testApp(t, srv, config.Resolved{})
-		code := a.run(args)
-		if code != 2 || !strings.Contains(errJSON(t, errb)["error"].(string), "validate-only") {
+		a, _, errb := testApp(t, srv, config.Resolved{ReadOnly: true})
+		if code := a.run(args); code != 0 {
 			t.Errorf("%v: exit %d stderr %q", args, code, errb.String())
 		}
+		if lines := auditLines(t, a); len(lines) != 0 {
+			t.Errorf("%v: reads are not audited: %v", args, lines)
+		}
 	}
-	if srv.hits.Load() != 0 {
-		t.Fatal("an unknown flag must not reach the network")
+	if srv.hits.Load() != 2 {
+		t.Fatalf("hits %d", srv.hits.Load())
 	}
 }
 

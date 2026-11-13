@@ -19,7 +19,8 @@ import (
 // SchemaVersion is the manifest format this build understands.
 const SchemaVersion = 1
 
-// Risk classes. delete, spend and admin need --force.
+// Risk classes. delete, spend and admin are gated: applying them needs
+// --apply --confirm-spend.
 const (
 	RiskRead   = "read"
 	RiskWrite  = "write"
@@ -241,5 +242,6 @@ func RiskRank(risk string) int {
 	}
 }
 
-// NeedsForce reports whether a class needs --force.
-func NeedsForce(risk string) bool { return RiskRank(risk) == 2 }
+// NeedsConfirm reports whether a class is gated: applying it needs
+// --apply --confirm-spend.
+func NeedsConfirm(risk string) bool { return RiskRank(risk) == 2 }

@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/api"
 )
 
 // maxJSONBody caps --data so a mistaken `--data @/dev/urandom` fails locally.

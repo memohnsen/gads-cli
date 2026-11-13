@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
-	"github.com/wir-drei-digital/google-ads-cli/internal/config"
+	"github.com/memohnsen/gads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/config"
 )
 
 // A path that cannot be written is caught before the request, so usage
@@ -23,8 +23,8 @@ func TestOutputBadPathNothingSent(t *testing.T) {
 	for _, args := range [][]string{
 		{"campaigns", "mutate", "--customer-id", "1234567890", "--data", pausedCampaign, "--output", bad},
 		{"search", "--customer-id", "1234567890", "--query", "SELECT campaign.id FROM campaign", "--all", "--output", bad},
-		{"api", "GET", "v25/customers:listAccessibleCustomers", "--output", bad},
-		{"api", "POST", "v25/customers/1234567890/campaigns:mutate", "--data", pausedCampaign, "--output", t.TempDir()},
+		{"api", "GET", "v26/customers:listAccessibleCustomers", "--output", bad},
+		{"api", "POST", "v26/customers/1234567890/campaigns:mutate", "--data", pausedCampaign, "--output", t.TempDir()},
 	} {
 		a, _, errb := testApp(t, srv, config.Resolved{})
 		if code := a.run(args); code != 2 || errJSON(t, errb)["kind"] != "usage" {
@@ -40,7 +40,7 @@ func TestOutputWritesTheFile(t *testing.T) {
 	srv := newFakeServer(t, reply(`{"results":[{"resourceName":"customers/1234567890/campaigns/1"}]}`))
 	p := writeFile(t, "out.json", []byte("an older, longer response that must not survive"))
 	a, out, errb := testApp(t, srv, config.Resolved{})
-	if code := a.run([]string{"campaigns", "mutate", "--customer-id", "1234567890", "--data", pausedCampaign, "--output", p}); code != 0 {
+	if code := a.run([]string{"campaigns", "mutate", "--customer-id", "1234567890", "--apply", "--data", pausedCampaign, "--output", p}); code != 0 {
 		t.Fatalf("exit %d %s", code, errb.String())
 	}
 	got, _ := os.ReadFile(p)
@@ -130,7 +130,7 @@ func TestOutputToNonRegularFile(t *testing.T) {
 	}
 	srv := newFakeServer(t, reply(`{"resourceNames":[]}`))
 	a, out, errb := testApp(t, srv, config.Resolved{})
-	if code := a.run([]string{"api", "GET", "v25/customers:listAccessibleCustomers", "--output", os.DevNull}); code != 0 || out.Len() != 0 {
+	if code := a.run([]string{"api", "GET", "v26/customers:listAccessibleCustomers", "--output", os.DevNull}); code != 0 || out.Len() != 0 {
 		t.Fatalf("exit %d stdout %q %s", code, out.String(), errb.String())
 	}
 	if _, err := os.Stat(os.DevNull); err != nil {
@@ -146,7 +146,7 @@ func TestOutputToNonRegularFile(t *testing.T) {
 	got := make(chan string)
 	go func() { b, _ := io.ReadAll(r); got <- string(b) }()
 	a, out, errb = testApp(t, srv, config.Resolved{})
-	code := a.run([]string{"api", "GET", "v25/customers:listAccessibleCustomers", "--output", fmt.Sprintf("/dev/fd/%d", w.Fd())})
+	code := a.run([]string{"api", "GET", "v26/customers:listAccessibleCustomers", "--output", fmt.Sprintf("/dev/fd/%d", w.Fd())})
 	w.Close()
 	if body := <-got; code != 0 || body != `{"resourceNames":[]}` || out.Len() != 0 {
 		t.Fatalf("pipe: exit %d, pipe got %q, stdout %q %s", code, body, out.String(), errb.String())

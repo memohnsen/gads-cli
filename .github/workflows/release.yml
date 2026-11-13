@@ -16,9 +16,12 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version-file: go.mod
+      - name: test before publishing
+        run: go test ./... && ./scripts/check-secrets.sh
       - uses: goreleaser/goreleaser-action@v6
         with:
+          version: "~> v2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

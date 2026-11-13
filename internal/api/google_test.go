@@ -8,7 +8,7 @@ import (
 )
 
 func quotaBody(delay string) string {
-	return `{"error":{"code":429,"message":"Resource has been exhausted","status":"RESOURCE_EXHAUSTED","details":[{"@type":"type.googleapis.com/google.ads.googleads.v25.errors.GoogleAdsFailure","errors":[{"errorCode":{"quotaError":"RESOURCE_TEMPORARILY_EXHAUSTED"},"message":"Too many requests.","details":{"quotaErrorDetails":{"rateScope":"ACCOUNT","retryDelay":"` + delay + `"}}}],"requestId":"rq-429"}]}}`
+	return `{"error":{"code":429,"message":"Resource has been exhausted","status":"RESOURCE_EXHAUSTED","details":[{"@type":"type.googleapis.com/google.ads.googleads.v26.errors.GoogleAdsFailure","errors":[{"errorCode":{"quotaError":"RESOURCE_TEMPORARILY_EXHAUSTED"},"message":"Too many requests.","details":{"quotaErrorDetails":{"rateScope":"ACCOUNT","retryDelay":"` + delay + `"}}}],"requestId":"rq-429"}]}}`
 }
 
 func failureBody(code, value, message, path string) string {
@@ -16,7 +16,7 @@ func failureBody(code, value, message, path string) string {
 	if path != "" {
 		loc = `,"location":{"fieldPathElements":[{"fieldName":"mutate_operations","index":0},{"fieldName":"campaign_operation"},{"fieldName":"create"},{"fieldName":"` + path + `"}]}`
 	}
-	return `{"error":{"code":400,"message":"Request contains an invalid argument.","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.ads.googleads.v25.errors.GoogleAdsFailure","errors":[{"errorCode":{"` + code + `":"` + value + `"},"message":"` + message + `"` + loc + `}],"requestId":"rq-1"}]}}`
+	return `{"error":{"code":400,"message":"Request contains an invalid argument.","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.ads.googleads.v26.errors.GoogleAdsFailure","errors":[{"errorCode":{"` + code + `":"` + value + `"},"message":"` + message + `"` + loc + `}],"requestId":"rq-1"}]}}`
 }
 
 func respond(status int, body string, header map[string]string) http.HandlerFunc {
@@ -32,9 +32,9 @@ func respond(status int, body string, header map[string]string) http.HandlerFunc
 
 func TestGoogleAdsFailureMessage(t *testing.T) {
 	c, _ := testClient(t, respond(400, failureBody("fieldError", "REQUIRED", "The required field was not present.", "contains_eu_political_advertising"), nil))
-	_, err := c.Do(context.Background(), Request{Method: "POST", Path: "v25/customers/1/googleAds:mutate", Body: []byte(`{}`), Risk: "write"})
+	_, err := c.Do(context.Background(), Request{Method: "POST", Path: "v26/customers/1/googleAds:mutate", Body: []byte(`{}`), Risk: "write"})
 	e := asErr(t, err)
-	want := "POST v25/customers/1/googleAds:mutate: HTTP 400: fieldError.REQUIRED: The required field was not present. (mutate_operations[0].campaign_operation.create.contains_eu_political_advertising)"
+	want := "POST v26/customers/1/googleAds:mutate: HTTP 400: fieldError.REQUIRED: The required field was not present. (mutate_operations[0].campaign_operation.create.contains_eu_political_advertising)"
 	if e.Kind != KindValidation || e.Message != want {
 		t.Fatalf("got  %q\nwant %q", e.Message, want)
 	}
@@ -89,8 +89,8 @@ func TestConflictKinds(t *testing.T) {
 }
 
 func TestPartialFailure(t *testing.T) {
-	r := Request{Method: "POST", Path: "v25/customers/1/campaigns:mutate"}
-	failed := &Response{Status: 200, Header: http.Header{}, Body: []byte(`{"results":[{},{"resourceName":"customers/1/campaigns/2"}],"partialFailureError":{"code":3,"message":"Multiple errors in details.","details":[{"@type":"type.googleapis.com/google.ads.googleads.v25.errors.GoogleAdsFailure","errors":[{"errorCode":{"fieldError":"REQUIRED"},"message":"The required field was not present.","location":{"fieldPathElements":[{"fieldName":"operations","index":0}]}}]}]}}`)}
+	r := Request{Method: "POST", Path: "v26/customers/1/campaigns:mutate"}
+	failed := &Response{Status: 200, Header: http.Header{}, Body: []byte(`{"results":[{},{"resourceName":"customers/1/campaigns/2"}],"partialFailureError":{"code":3,"message":"Multiple errors in details.","details":[{"@type":"type.googleapis.com/google.ads.googleads.v26.errors.GoogleAdsFailure","errors":[{"errorCode":{"fieldError":"REQUIRED"},"message":"The required field was not present.","location":{"fieldPathElements":[{"fieldName":"operations","index":0}]}}]}]}}`)}
 	e := PartialFailure(r, failed)
 	if e == nil || e.Kind != KindPartialFailure || !strings.Contains(e.Message, "fieldError.REQUIRED") {
 		t.Fatalf("%+v", e)
@@ -106,9 +106,9 @@ func TestPartialFailure(t *testing.T) {
 func TestPlanningHintSkipsMutates(t *testing.T) {
 	denied := `{"error":{"code":403,"message":"denied","status":"PERMISSION_DENIED"}}`
 	for _, id := range []string{"customers.keywordPlans.mutate", "customers.keywordPlanAdGroups.mutate", "customers.audiences.mutate",
-		"raw POST v25/customers/1234567890/keywordPlanCampaigns:mutate"} {
+		"raw POST v26/customers/1234567890/keywordPlanCampaigns:mutate"} {
 		c, _ := testClient(t, respond(403, denied, nil))
-		r := Request{Method: "POST", Path: "v25/customers/1234567890/x:mutate", Body: []byte(`{}`), Risk: "write", MethodID: id}
+		r := Request{Method: "POST", Path: "v26/customers/1234567890/x:mutate", Body: []byte(`{}`), Risk: "write", MethodID: id}
 		_, err := c.Do(context.Background(), r)
 		if e := asErr(t, err); strings.Contains(e.Message, "planning services") {
 			t.Errorf("%s: %q", id, e.Message)

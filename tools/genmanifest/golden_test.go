@@ -10,7 +10,7 @@ import (
 // blocked state. A diff here is a public API change: review it, then
 // regenerate with UPDATE_GOLDEN=1 go test ./tools/genmanifest.
 func TestGoldenCommands(t *testing.T) {
-	m, _, err := Build("../../spec/googleads-v25.discovery.json", "overrides.json", "classifications.json")
+	m, _, err := Build(mustVendoredSpec(t), "overrides.json", "classifications.json")
 	if err != nil {
 		t.Fatal(err)
 	}

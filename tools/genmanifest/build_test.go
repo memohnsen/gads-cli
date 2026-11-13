@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 const mini = "testdata/mini-discovery.json"
@@ -114,7 +114,7 @@ func TestBuildProblems(t *testing.T) {
 }
 
 func TestBuildRealDocument(t *testing.T) {
-	m, props, err := Build("../../spec/googleads-v25.discovery.json", "overrides.json", "classifications.json")
+	m, props, err := Build(mustVendoredSpec(t), "overrides.json", "classifications.json")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/api"
+	"github.com/memohnsen/gads-cli/internal/api"
 )
 
 // outputFile is the file --output names. It is opened before the request,

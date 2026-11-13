@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 // Client performs API requests. BaseURL and TokenSource are required;
@@ -107,7 +107,7 @@ func (c *Client) guard(r Request) *Error {
 		return err
 	}
 	if c.TokenSource == nil {
-		return Usagef("no service-account key: set GOOGLE_ADS_JSON_KEY_FILE_PATH, store one with `googleads config set service-account-key < key.json`, or run `googleads init`")
+		return Usagef("no service-account key: point GOOGLE_ADS_JSON_KEY_FILE_PATH at a chmod 600 key file, set a 1Password reference with `googleads config set op-ref op://<vault>/<item>/<field>`, store one with `googleads config set service-account-key < key.json`, or run `googleads init`")
 	}
 	u, err := url.Parse(c.BaseURL)
 	if err != nil || u.Host == "" {

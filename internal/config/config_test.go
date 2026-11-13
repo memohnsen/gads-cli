@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,9 +11,10 @@ import (
 func setTestDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	old := userConfigDir
+	old, oldState := userConfigDir, userStateDir
 	userConfigDir = func() (string, error) { return dir, nil }
-	t.Cleanup(func() { userConfigDir = old })
+	userStateDir = func() (string, error) { return filepath.Join(dir, "state"), nil }
+	t.Cleanup(func() { userConfigDir, userStateDir = old, oldState })
 	return dir
 }
 
@@ -23,25 +23,31 @@ func env(m map[string]string) func(string) string { return func(k string) string
 func TestPathAndMissingFile(t *testing.T) {
 	dir := setTestDir(t)
 	p, err := Path()
-	if err != nil || p != filepath.Join(dir, "googleads", "config.json") {
+	if err != nil || p != filepath.Join(dir, "gads", "config.json") {
 		t.Fatalf("path %q %v", p, err)
 	}
 	c, err := Load()
-	if err != nil || c.CustomerID != "" || c.ServiceAccountKey != nil {
+	if err != nil || c.CustomerID != "" || c.ReadOnly != nil {
 		t.Fatalf("missing file must load as zero: %+v %v", c, err)
+	}
+	if k, _ := CredentialPath(RoleWriter); k != filepath.Join(dir, "gads", "credentials", "writer.json") {
+		t.Fatalf("credential path %q", k)
 	}
 }
 
 func TestSaveLoadRoundTripAndPerms(t *testing.T) {
 	setTestDir(t)
-	in := Config{ServiceAccountKey: json.RawMessage(`{"type":"service_account"}`), CustomerID: "1234567890",
-		LoginCustomerID: "1112223333", ReadOnly: true, BudgetCapMicros: 29610000}
+	off := false
+	in := Config{CustomerID: "1234567890", LoginCustomerID: "1112223333", ReadOnly: &off, BudgetCapMicros: 29610000,
+		OpReaderRef: "op://Vault/r/credential", OpWriterRef: "op://Vault/w/credential", DryRunCredential: RoleWriter,
+		AuditLog: "/var/log/gads.jsonl"}
 	if err := Save(in); err != nil {
 		t.Fatal(err)
 	}
 	out, err := Load()
-	if err != nil || string(out.ServiceAccountKey) != `{"type":"service_account"}` || out.CustomerID != in.CustomerID ||
-		out.LoginCustomerID != in.LoginCustomerID || !out.ReadOnly || out.BudgetCapMicros != in.BudgetCapMicros {
+	if err != nil || out.CustomerID != in.CustomerID || out.LoginCustomerID != in.LoginCustomerID || out.ReadOnly == nil ||
+		*out.ReadOnly || out.BudgetCapMicros != in.BudgetCapMicros || out.OpReaderRef != in.OpReaderRef ||
+		out.OpWriterRef != in.OpWriterRef || out.DryRunCredential != RoleWriter || out.AuditLog != in.AuditLog {
 		t.Fatalf("round trip %+v %v", out, err)
 	}
 	p, _ := Path()
@@ -51,6 +57,35 @@ func TestSaveLoadRoundTripAndPerms(t *testing.T) {
 	}
 	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Fatalf("perms %v, want 0600", fi.Mode().Perm())
+	}
+}
+
+func TestLoadRefusesAKeyInTheConfigFile(t *testing.T) {
+	setTestDir(t)
+	p, _ := Path()
+	os.MkdirAll(filepath.Dir(p), 0o700)
+	os.WriteFile(p, []byte(`{"service_account_key":{"type":"service_account"}}`), 0o600)
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "service_account_key") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestCheckPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no permission bits")
+	}
+	dir := t.TempDir()
+	p := filepath.Join(dir, "k.json")
+	os.WriteFile(p, []byte("{}"), 0o644)
+	if err := CheckPrivate(p); err == nil || !strings.Contains(err.Error(), "chmod 600") {
+		t.Fatalf("0644 must be refused: %v", err)
+	}
+	os.Chmod(p, 0o600)
+	if err := CheckPrivate(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckPrivate(dir); err == nil {
+		t.Fatal("a directory is not a key file")
 	}
 }
 
@@ -118,25 +153,68 @@ func TestFormatMicros(t *testing.T) {
 }
 
 func TestResolveDefaults(t *testing.T) {
-	setTestDir(t)
+	dir := setTestDir(t)
 	r, err := Resolve(env(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.APIBase != DefaultAPIBase || r.TokenURL != DefaultTokenURL || r.KeySource() != "" || r.ReadOnly || r.FromEnv != nil {
+	if r.APIBase != DefaultAPIBase || r.TokenURL != DefaultTokenURL || r.KeySource() != "" || r.Writer.Configured() || r.FromEnv != nil {
+		t.Fatalf("%+v", r)
+	}
+	if !r.ReadOnly || r.ReadOnlyOrigin != "default" {
+		t.Fatalf("read-only must be on by default: %+v", r)
+	}
+	if r.CustomerID != "" || r.CustomerOrigin != "" {
+		t.Fatalf("no customer is built in: %q (%s)", r.CustomerID, r.CustomerOrigin)
+	}
+	if r.DryRunCredential != RoleReader || r.AuditLog != filepath.Join(dir, "state", "gads", "mutations.jsonl") {
 		t.Fatalf("%+v", r)
 	}
 }
 
 func TestResolveFileValues(t *testing.T) {
 	setTestDir(t)
-	Save(Config{ServiceAccountKey: json.RawMessage(`{}`), CustomerID: "1234567890", BudgetCapMicros: 30000000, ReadOnly: true})
+	off := false
+	Save(Config{CustomerID: "1234567890", BudgetCapMicros: 30000000, ReadOnly: &off})
+	kp, _ := CredentialPath(RoleReader)
+	os.MkdirAll(filepath.Dir(kp), 0o700)
+	os.WriteFile(kp, []byte("{}"), 0o600)
 	r, err := Resolve(env(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.KeySource() != "config" || r.CustomerID != "1234567890" || r.BudgetCapMicros != 30000000 || !r.ReadOnly {
+	if r.KeySource() != SourceFile || r.Reader.Path != kp || r.Writer.Configured() || r.CustomerID != "1234567890" ||
+		r.CustomerOrigin != "config" || r.BudgetCapMicros != 30000000 || r.ReadOnly || r.ReadOnlyOrigin != "config" {
 		t.Fatalf("%+v", r)
+	}
+}
+
+func TestResolveCredentialOrder(t *testing.T) {
+	setTestDir(t)
+	kp, _ := CredentialPath(RoleWriter)
+	os.MkdirAll(filepath.Dir(kp), 0o700)
+	os.WriteFile(kp, []byte("{}"), 0o600)
+	// file only
+	r, _ := Resolve(env(nil))
+	if r.Writer.Source != SourceFile {
+		t.Fatalf("file: %+v", r.Writer)
+	}
+	// env path beats the file
+	r, _ = Resolve(env(map[string]string{"GOOGLE_ADS_WRITE_JSON_KEY_FILE_PATH": "/k/w.json"}))
+	if r.Writer.Source != SourceEnv || r.Writer.Path != "/k/w.json" || r.Writer.EnvName != "GOOGLE_ADS_WRITE_JSON_KEY_FILE_PATH" {
+		t.Fatalf("env: %+v", r.Writer)
+	}
+	// 1Password beats both
+	Save(Config{OpWriterRef: "op://Vault/w/credential"})
+	r, _ = Resolve(env(map[string]string{"GOOGLE_ADS_WRITE_JSON_KEY_FILE_PATH": "/k/w.json"}))
+	if r.Writer.Source != SourceOp || r.Writer.OpRef != "op://Vault/w/credential" {
+		t.Fatalf("op: %+v", r.Writer)
+	}
+	if r.Reader.Configured() {
+		t.Fatalf("the writer's sources must not configure the reader: %+v", r.Reader)
+	}
+	if _, err := Resolve(env(map[string]string{"GOOGLE_ADS_OP_READER_REF": "Vault/r"})); err == nil {
+		t.Fatal("an op reference without op:// must be refused")
 	}
 }
 
@@ -150,10 +228,10 @@ func TestResolveNormalizesEnvCustomerID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.CustomerID != "1234567890" || r.LoginCustomerID != "9998887777" {
+	if r.CustomerID != "1234567890" || r.CustomerOrigin != "env" || r.LoginCustomerID != "9998887777" {
 		t.Fatalf("customer %q login %q", r.CustomerID, r.LoginCustomerID)
 	}
-	if r.KeyPath != "/keys/k.json" || r.KeySource() != "env" {
+	if r.Reader.Path != "/keys/k.json" || r.KeySource() != SourceEnv {
 		t.Fatalf("key %+v", r)
 	}
 	if !r.FromEnv["GOOGLE_ADS_CUSTOMER_ID"] || !r.FromEnv["GOOGLE_ADS_JSON_KEY_FILE_PATH"] {
@@ -171,11 +249,28 @@ func TestResolveRejectsBadCustomerID(t *testing.T) {
 
 func TestResolveReadOnlyValues(t *testing.T) {
 	setTestDir(t)
-	for v, want := range map[string]bool{"1": true, "true": true, "TRUE": true, "0": false, "no": false} {
+	off := false
+	Save(Config{ReadOnly: &off})
+	// The environment can switch read-only mode on, never off.
+	for v, want := range map[string]bool{"1": true, "true": true, "TRUE": true, "0": false, "no": false, "false": false} {
 		r, _ := Resolve(env(map[string]string{"GOOGLE_ADS_READ_ONLY": v}))
 		if r.ReadOnly != want {
-			t.Errorf("GOOGLE_ADS_READ_ONLY=%s: %v", v, r.ReadOnly)
+			t.Errorf("GOOGLE_ADS_READ_ONLY=%s over config false: %v", v, r.ReadOnly)
 		}
+	}
+	Save(Config{})
+	for _, v := range []string{"0", "false", "no"} {
+		if r, _ := Resolve(env(map[string]string{"GOOGLE_ADS_READ_ONLY": v})); !r.ReadOnly {
+			t.Errorf("GOOGLE_ADS_READ_ONLY=%s must not switch the default read-only mode off", v)
+		}
+	}
+}
+
+func TestAuditLogMustBeAbsolute(t *testing.T) {
+	setTestDir(t)
+	Save(Config{AuditLog: "relative/log.jsonl"})
+	if _, err := Resolve(env(nil)); err == nil || !strings.Contains(err.Error(), "absolute") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

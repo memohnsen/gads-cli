@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/wir-drei-digital/google-ads-cli/internal/manifest"
+	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
 var pathPlaceholder = regexp.MustCompile(`\{\+?([A-Za-z0-9_]+)\}`)
