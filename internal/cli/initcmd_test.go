@@ -46,7 +46,7 @@ func TestInitRefusesWithoutTerminal(t *testing.T) {
 
 func TestInitExpandsHomeInKeyPath(t *testing.T) {
 	// The first cap answer uses a decimal comma and must be asked again.
-	a, home := initApp(t, 200, "~/key.json", "123-456-7890", "29,61", "29.61")
+	a, home := initApp(t, 200, "~/key.json", "", "123-456-7890", "29,61", "29.61")
 	if err := os.WriteFile(filepath.Join(home, "key.json"), testKeyJSON(t), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -54,22 +54,29 @@ func TestInitExpandsHomeInKeyPath(t *testing.T) {
 		t.Fatalf("exit %d", code)
 	}
 	c, err := config.Load()
-	if err != nil || len(c.ServiceAccountKey) == 0 || c.CustomerID != "1234567890" || c.BudgetCapMicros != 29610000 {
+	if err != nil || c.CustomerID != "1234567890" || c.BudgetCapMicros != 29610000 || c.ReadOnly != nil {
 		t.Fatalf("saved %+v %v", c, err)
 	}
+	if rp, _ := config.CredentialPath("reader"); func() bool { _, err := os.Stat(rp); return err != nil }() {
+		t.Fatal("reader key not stored")
+	}
+	if wp, _ := config.CredentialPath("writer"); func() bool { _, err := os.Stat(wp); return err == nil }() {
+		t.Fatal("a skipped writer key must not be stored")
+	}
 	out := a.stdout.(interface{ String() string }).String()
-	if !strings.Contains(out, "Muster AG") || !strings.Contains(out, "CHF") || !strings.Contains(out, "delete the downloaded copy") {
+	if !strings.Contains(out, "Muster AG") || !strings.Contains(out, "CHF") || !strings.Contains(out, "delete the downloaded cop") {
 		t.Fatalf("stdout %q", out)
 	}
 }
 
 func TestInitSavesNothingWhenVerificationFails(t *testing.T) {
-	a, home := initApp(t, 403, "~/key.json", "123-456-7890", "29.61")
+	a, home := initApp(t, 403, "~/key.json", "", "123-456-7890", "29.61")
 	os.WriteFile(filepath.Join(home, "key.json"), testKeyJSON(t), 0o600)
 	if code := a.run([]string{"init"}); code != 1 {
 		t.Fatalf("exit %d", code)
 	}
-	if c, _ := config.Load(); c.CustomerID != "" || len(c.ServiceAccountKey) != 0 {
+	rp, _ := config.CredentialPath("reader")
+	if c, _ := config.Load(); c.CustomerID != "" || func() bool { _, err := os.Stat(rp); return err == nil }() {
 		t.Fatalf("a failed verification saved %+v", c)
 	}
 	if errOut := a.stderr.(interface{ String() string }).String(); !strings.Contains(errOut, "Access and security") {

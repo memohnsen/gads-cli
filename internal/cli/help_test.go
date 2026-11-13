@@ -19,7 +19,7 @@ func help(t *testing.T, args ...string) string {
 func TestHelpShowsResourceFieldsAndExample(t *testing.T) {
 	h := help(t, "campaigns", "mutate")
 	for _, want := range []string{
-		"POST v25/customers/{+customerId}/campaigns:mutate (risk: write)",
+		"POST v26/customers/{+customerId}/campaigns:mutate (risk: write)",
 		"status string (one of: ENABLED, PAUSED, REMOVED): The status of the campaign.",
 		"id int64 as string (read-only)",
 		"networkSettings Campaign_NetworkSettings",

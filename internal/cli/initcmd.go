@@ -21,11 +21,12 @@ import (
 func (a *app) initCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
-		Short: "Interactive setup: service-account key, customer, budget cap (needs a terminal)",
-		Long: "Interactive setup. Asks for the path of a service-account key file, the customer ID and a budget\n" +
-			"cap, checks the key against Google with two read-only calls, and saves everything to the config\n" +
-			"file (0600). Needs a terminal: agents configure googleads with `googleads config set` or the\n" +
-			"environment instead.",
+		Short: "Interactive setup for a person: keys, customer, budget cap (needs a terminal)",
+		Long: "Interactive setup. Asks for the path of the Read only service-account key file, optionally the\n" +
+			"Standard (writer) key file, the customer ID and a budget cap, checks the reader key against\n" +
+			"Google with two read-only calls, stores each key as a 0600 file under the config directory and\n" +
+			"saves the rest to the config file. Read-only mode stays on. Needs a terminal: agents never run\n" +
+			"it. To keep keys in 1Password instead, use `googleads config set op-ref`.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			isTTY := a.isTerminal
@@ -46,17 +47,22 @@ func (a *app) initCommand() *cobra.Command {
 
 func (a *app) runInit(ctx context.Context, p prompter) error {
 	out := a.stdout
-	fmt.Fprintln(out, "googleads setup: you need a service-account key file and your Google Ads customer ID.")
-	for _, name := range []string{"GOOGLE_ADS_JSON_KEY_FILE_PATH", "GOOGLE_ADS_CUSTOMER_ID", "GOOGLE_ADS_LOGIN_CUSTOMER_ID", "GOOGLE_ADS_READ_ONLY"} {
+	fmt.Fprintln(out, "googleads setup: you need the Read only service-account key file and the Google Ads customer ID.")
+	for _, name := range []string{"GOOGLE_ADS_JSON_KEY_FILE_PATH", "GOOGLE_ADS_WRITE_JSON_KEY_FILE_PATH",
+		"GOOGLE_ADS_OP_READER_REF", "GOOGLE_ADS_OP_WRITER_REF", "GOOGLE_ADS_CUSTOMER_ID", "GOOGLE_ADS_LOGIN_CUSTOMER_ID", "GOOGLE_ADS_READ_ONLY"} {
 		if a.res.FromEnv[name] {
 			fmt.Fprintf(out, "Note: %s is set in this shell and wins over what you save here.\n", name)
 		}
 	}
-	key, keyJSON, keyPath, err := a.askKey(p)
+	key, keyJSON, keyPath, err := a.askKey(p, "Path to the Read only (reader) service-account key file (JSON): ", false)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "Key for %s (project %s).\n", key.ClientEmail, key.ProjectID)
+	fmt.Fprintf(out, "Reader key for %s (project %s).\n", key.ClientEmail, key.ProjectID)
+	_, writerJSON, writerPath, err := a.askKey(p, "Path to the Standard (writer) key file, used only with --apply (blank to skip): ", true)
+	if err != nil {
+		return err
+	}
 	customer, err := askValid(p, out, "Google Ads customer ID (e.g. 123-456-7890): ", config.NormalizeCustomerID)
 	if err != nil {
 		return err
@@ -67,30 +73,59 @@ func (a *app) runInit(ctx context.Context, p prompter) error {
 	}
 	fmt.Fprintf(out, "Connected to %s (currency %s, time zone %s).\n", name, currency, zone)
 	capMicros, err := askValid(p, out,
-		fmt.Sprintf("Budget cap: the highest daily budget googleads may ever set, in %s (e.g. 30): ", currency),
+		fmt.Sprintf("Budget cap: the most daily budget the account may total, in %s (e.g. 30): ", currency),
 		config.ParseMoneyToMicros)
 	if err != nil {
 		return err
 	}
-	var compact bytes.Buffer
-	if err := json.Compact(&compact, keyJSON); err != nil {
-		return api.Usagef("%v", err)
+	saved := []string{keyPath}
+	if err := a.storeKey(config.RoleReader, keyJSON); err != nil {
+		return err
+	}
+	if writerJSON != nil {
+		if err := a.storeKey(config.RoleWriter, writerJSON); err != nil {
+			return err
+		}
+		saved = append(saved, writerPath)
 	}
 	if err := a.updateConfig(func(c *config.Config) {
-		c.ServiceAccountKey, c.CustomerID, c.BudgetCapMicros = compact.Bytes(), customer, capMicros
+		c.CustomerID, c.BudgetCapMicros = customer, capMicros
 	}); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "Saved. The key now lives in the config file; delete the downloaded copy: %s\n", keyPath)
+	fmt.Fprintf(out, "Saved. Keys live in 0600 files under the config directory; delete the downloaded copies: %s\n", strings.Join(saved, ", "))
+	fmt.Fprintln(out, "Read-only mode is on. To allow --apply, a person runs: googleads config set read-only false")
 	return nil
 }
 
-// askKey asks for the key file until one reads and validates, three times at most.
-func (a *app) askKey(p prompter) (*auth.Key, []byte, string, error) {
+// storeKey writes a role's key to its 0600 file under the config directory.
+func (a *app) storeKey(role string, raw []byte) error {
+	p, err := config.CredentialPath(role)
+	if err != nil {
+		return api.Usagef("%v", err)
+	}
+	if err := config.WriteFileAtomic(p, raw); err != nil {
+		return api.Usagef("%v", err)
+	}
+	return nil
+}
+
+// askKey asks for a key file until one reads and validates, three times at
+// most. With optional, a blank answer skips it.
+func (a *app) askKey(p prompter, prompt string, optional bool) (*auth.Key, []byte, string, error) {
 	for range 3 {
-		path, err := ask(p, "Path to the service-account key file (JSON): ", false)
+		var path string
+		var err error
+		if optional {
+			path, err = p.Line(prompt) // blank is an answer: skip
+		} else {
+			path, err = ask(p, prompt, false)
+		}
 		if err != nil {
 			return nil, nil, "", api.Usagef("init: %v", err)
+		}
+		if optional && strings.TrimSpace(path) == "" {
+			return nil, nil, "", nil
 		}
 		path = expandHome(path)
 		raw, err := os.ReadFile(path)

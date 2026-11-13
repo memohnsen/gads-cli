@@ -14,11 +14,18 @@ const (
 	KindOutcomeUnknown = "outcome_unknown"
 	KindIncomplete     = "incomplete"
 	KindUsage          = "usage"
+	// KindGuardrail: a safety rule refused the call before anything was
+	// sent (dry-run default, --apply/--confirm-spend gates, read-only mode,
+	// the budget cap, a required PAUSED status, a blocked method).
+	KindGuardrail = "guardrail"
 	KindPartialFailure = "partial_failure"
 	KindConflict       = "conflict"
 	// KindOutputFailed: the call succeeded, but its response could not be
 	// written where it was asked to go. The change, if any, has happened.
 	KindOutputFailed = "output_failed"
+	// KindAuditFailed: the call succeeded, but its audit-log line could not
+	// be written. The change has happened; do not repeat it.
+	KindAuditFailed = "audit_failed"
 )
 
 // Error is the single error type the CLI reports, shaped for JSON output.
@@ -36,6 +43,15 @@ func (e *Error) Error() string { return e.Message }
 func Usagef(format string, a ...any) *Error {
 	return &Error{Kind: KindUsage, Message: fmt.Sprintf(format, a...)}
 }
+
+// Guardrailf builds a guardrail refusal: a safety rule stopped the call
+// before any request was sent. It exits 2, like a usage error.
+func Guardrailf(format string, a ...any) *Error {
+	return &Error{Kind: KindGuardrail, Message: fmt.Sprintf(format, a...)}
+}
+
+// IsLocal reports whether e was raised before anything was sent.
+func (e *Error) IsLocal() bool { return e.Kind == KindUsage || e.Kind == KindGuardrail }
 
 func kindForStatus(status int) string {
 	switch {

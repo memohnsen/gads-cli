@@ -23,7 +23,7 @@ func TestCommandsJSON(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &cat); err != nil {
 		t.Fatal(err)
 	}
-	if cat.SchemaVersion != 1 || cat.APIVersion != "v25" || cat.DiscoveryRevision != "20260923" || len(cat.Commands) != 7 {
+	if cat.SchemaVersion != 1 || cat.APIVersion != "v26" || cat.DiscoveryRevision != "20260923" || len(cat.Commands) != 7 {
 		t.Fatalf("%+v", cat)
 	}
 	by := map[string]map[string]any{}
@@ -60,7 +60,7 @@ func TestSchemaCommand(t *testing.T) {
 	if code := a.run([]string{"schema", "Campaign"}); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	if !strings.Contains(out.String(), "Campaign (GoogleAdsGoogleadsV25Resources__Campaign)") || !strings.Contains(out.String(), "status string") {
+	if !strings.Contains(out.String(), "Campaign (GoogleAdsGoogleadsV26Resources__Campaign)") || !strings.Contains(out.String(), "status string") {
 		t.Fatalf("%s", out.String())
 	}
 	a, out, _ = testApp(t, nil, config.Resolved{})
@@ -79,8 +79,8 @@ func TestSchemaCommand(t *testing.T) {
 
 func TestSchemaAmbiguousAndUnknown(t *testing.T) {
 	a, _, errb := testApp(t, nil, config.Resolved{})
-	a.manifest.Schemas["GoogleAdsGoogleadsV25Services__Campaign"] = manifest.Schema{}
-	if code := a.run([]string{"schema", "Campaign"}); code != 2 || !strings.Contains(errb.String(), "GoogleAdsGoogleadsV25Services__Campaign") {
+	a.manifest.Schemas["GoogleAdsGoogleadsV26Services__Campaign"] = manifest.Schema{}
+	if code := a.run([]string{"schema", "Campaign"}); code != 2 || !strings.Contains(errb.String(), "GoogleAdsGoogleadsV26Services__Campaign") {
 		t.Fatalf("exit %d %s", code, errb.String())
 	}
 	a, _, errb = testApp(t, nil, config.Resolved{})
@@ -91,7 +91,7 @@ func TestSchemaAmbiguousAndUnknown(t *testing.T) {
 
 func TestSchemaJSONKeepsAngleBracketsLiteral(t *testing.T) {
 	a, out, _ := testApp(t, nil, config.Resolved{})
-	a.manifest.Schemas["GoogleAdsGoogleadsV25Resources_Campaign_NetworkSettings"] = manifest.Schema{
+	a.manifest.Schemas["GoogleAdsGoogleadsV26Resources_Campaign_NetworkSettings"] = manifest.Schema{
 		Fields: []manifest.Field{{Name: "x", Type: "string", Doc: "a < b & c > d"}}}
 	if code := a.run([]string{"schema", "Campaign_NetworkSettings", "--json"}); code != 0 || !strings.Contains(out.String(), "a < b & c > d") {
 		t.Fatalf("exit %d stdout %q", code, out.String())

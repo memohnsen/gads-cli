@@ -162,39 +162,6 @@ func readQuery(v string) (string, error) {
 	return strings.TrimSpace(string(raw)), nil
 }
 
-// setOwnedFields sets validateOnly and partialFailure when their flags are
-// given, removing either spelling of the same field first so Google never
-// sees it twice. Without either flag the body goes out byte for byte.
-//
-// It runs after the guard, and re-encoding the body there is safe. For a
-// mutate body the guard parsed the same bytes strictly and refused duplicate
-// keys, mixed spellings of one field and trailing data, so this decode sees
-// exactly the object the guard inspected; UseNumber keeps every amount as
-// written. Other bodies carry nothing the guard inspects. The only change is
-// the two fields set here, which carry no amount, status or operation.
-func setOwnedFields(body []byte, validateOnly, partialFailure bool) ([]byte, error) {
-	if !validateOnly && !partialFailure {
-		return body, nil
-	}
-	obj := map[string]any{}
-	if len(body) > 0 {
-		dec := json.NewDecoder(bytes.NewReader(body))
-		dec.UseNumber()
-		if err := dec.Decode(&obj); err != nil {
-			return nil, api.Usagef("--data must be a JSON object to combine it with --validate-only or --partial-failure: %v", err)
-		}
-	}
-	if validateOnly {
-		delete(obj, "validate_only")
-		obj["validateOnly"] = true
-	}
-	if partialFailure {
-		delete(obj, "partial_failure")
-		obj["partialFailure"] = true
-	}
-	return jsonCompact(obj)
-}
-
 // jsonCompact marshals v without HTML escaping, so GAQL such as
 // "metrics.clicks > 0" goes out as written.
 func jsonCompact(v any) ([]byte, error) {

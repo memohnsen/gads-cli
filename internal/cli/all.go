@@ -15,7 +15,7 @@ import (
 // It is the only place the CLI reshapes a response, so each row reaches the
 // output exactly as Google sent it. Hitting --max-pages is not silent
 // success: the partial array is written and the run ends as incomplete.
-func (a *app) runAll(cmd *cobra.Command, meth *manifest.Method, base api.Request, out *outputFile) error {
+func (a *app) runAll(cmd *cobra.Command, meth *manifest.Method, base api.Request, out *outputFile, format string) error {
 	maxPages, _ := cmd.Flags().GetInt("max-pages")
 	if maxPages < 1 {
 		return api.Usagef("--max-pages must be at least 1, got %d", maxPages)
@@ -95,7 +95,14 @@ func (a *app) runAll(cmd *cobra.Command, meth *manifest.Method, base api.Request
 		buf.Write(r)
 	}
 	buf.WriteString("]\n")
-	if err := a.writeResponse(&api.Response{Body: buf.Bytes()}, out); err != nil {
+	merged := buf.Bytes()
+	if format != "" && format != "json" {
+		var err error
+		if merged, err = formatRows(rows, format); err != nil {
+			return err
+		}
+	}
+	if err := a.writeResponse(&api.Response{Body: merged}, out); err != nil {
 		return err
 	}
 	if !complete {

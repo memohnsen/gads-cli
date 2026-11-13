@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/memohnsen/gads-cli/internal/api"
-	"github.com/memohnsen/gads-cli/internal/guard"
 	"github.com/memohnsen/gads-cli/internal/manifest"
 )
 
@@ -129,8 +128,8 @@ func (a *app) leafCommand(meth *manifest.Method) *cobra.Command {
 	if isReport(meth) {
 		cmd.Flags().String("query", "", "GAQL query, or @file to read it from a file")
 	}
-	if meth.ValidateOnly {
-		cmd.Flags().Bool("validate-only", false, "let Google check the request completely without applying anything")
+	if isReport(meth) {
+		cmd.Flags().String("format", "json", "output format for the rows: json (Google's response as sent), csv or table")
 	}
 	if meth.PartialFailure {
 		cmd.Flags().Bool("partial-failure", false, "apply the operations that succeed; exit 1 with kind partial_failure if any fail")
@@ -146,47 +145,22 @@ func (a *app) leafCommand(meth *manifest.Method) *cobra.Command {
 // before any network I/O, so a refused call has no side effects at all.
 func (a *app) runMethod(cmd *cobra.Command, meth *manifest.Method, args []string) error {
 	if meth.Blocked != "" {
-		_, err := guard.Check(a.manifest, meth, nil, guard.Options{})
-		return err
+		return a.execute(cmd, execSpec{meth: meth, req: &api.Request{Method: meth.HTTPMethod, Path: meth.Path}})
 	}
 	req, err := a.buildRequest(cmd, meth, args)
 	if err != nil {
 		return err
 	}
-	validateOnly, partial := flagBool(cmd, "validate-only"), flagBool(cmd, "partial-failure")
-	dec, err := guard.Check(a.manifest, meth, req.Body, guard.Options{
-		Force: flagBool(cmd, "force"), ValidateOnly: validateOnly,
-		ReadOnly: a.res.ReadOnly, CapMicros: a.res.BudgetCapMicros,
-	})
-	if err != nil {
-		return err
-	}
-	req.Risk, req.ValidateOnly = dec.Class, validateOnly
-	if req.Body, err = setOwnedFields(req.Body, validateOnly, partial); err != nil {
-		return err
-	}
-	a.applyGlobalFlags(cmd)
-	out, err := openOutput(flagString(cmd, "output"))
-	if err != nil {
-		return err
-	}
-	defer out.discard()
-	if flagBool(cmd, "all") {
-		return a.runAll(cmd, meth, *req, out)
-	}
-	resp, err := a.client.Do(cmd.Context(), *req)
-	if err != nil {
-		return err
-	}
-	if err := a.writeResponse(resp, out); err != nil {
-		return err
-	}
-	if partial {
-		if pf := api.PartialFailure(*req, resp); pf != nil {
-			return pf
+	format := ""
+	if isReport(meth) {
+		if format = flagString(cmd, "format"); !validFormat(format) {
+			return api.Usagef("--format wants json, csv or table, got %q", format)
 		}
 	}
-	return nil
+	return a.execute(cmd, execSpec{
+		meth: meth, req: req, canValidate: meth.ValidateOnly,
+		partial: flagBool(cmd, "partial-failure"), all: flagBool(cmd, "all"), format: format,
+	})
 }
 
 func (a *app) applyGlobalFlags(cmd *cobra.Command) {

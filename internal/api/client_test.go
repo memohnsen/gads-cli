@@ -33,7 +33,7 @@ func asErr(t *testing.T, err error) *Error {
 	return e
 }
 
-var search = Request{Method: "POST", Path: "v25/customers/1234567890/googleAds:search",
+var search = Request{Method: "POST", Path: "v26/customers/1234567890/googleAds:search",
 	Body: []byte(`{"query":"SELECT customer.id FROM customer"}`), Risk: manifest.RiskRead, MethodID: "customers.googleAds.search"}
 
 func TestDoSendsHeadersAndJoinsPath(t *testing.T) {
@@ -50,7 +50,7 @@ func TestDoSendsHeadersAndJoinsPath(t *testing.T) {
 	if err != nil || resp.Status != 200 || string(resp.Body) != `{"results":[]}` {
 		t.Fatalf("resp %+v err %v", resp, err)
 	}
-	if got.URL.Path != "/v25/customers/1234567890/googleAds:search" {
+	if got.URL.Path != "/v26/customers/1234567890/googleAds:search" {
 		t.Fatalf("path %q", got.URL.Path)
 	}
 	if got.Header.Get("Authorization") != "Bearer tok" || got.Header.Get("Accept") != "application/json" ||
@@ -85,9 +85,9 @@ func TestGuardRefusals(t *testing.T) {
 		"no credential":   {Client{BaseURL: "https://googleads.googleapis.com"}, search, "no service-account key"},
 		"foreign host":    {Client{BaseURL: "https://evil.example", TokenSource: StaticToken("t")}, search, "refusing to send credentials to evil.example"},
 		"plain http":      {Client{BaseURL: "http://example.com", TokenSource: StaticToken("t"), AllowCustomBase: true}, search, "non-HTTPS"},
-		"read-only write": {Client{BaseURL: "https://googleads.googleapis.com", TokenSource: StaticToken("t"), ReadOnly: true}, Request{Method: "POST", Path: "v25/x:mutate", Risk: manifest.RiskWrite}, "read-only"},
+		"read-only write": {Client{BaseURL: "https://googleads.googleapis.com", TokenSource: StaticToken("t"), ReadOnly: true}, Request{Method: "POST", Path: "v26/x:mutate", Risk: manifest.RiskWrite}, "read-only"},
 		"credential param": {Client{BaseURL: "https://googleads.googleapis.com", TokenSource: StaticToken("t")},
-			Request{Method: "GET", Path: "v25/x", Risk: manifest.RiskRead, Query: url.Values{"access_token": {"x"}}}, "access_token"},
+			Request{Method: "GET", Path: "v26/x", Risk: manifest.RiskRead, Query: url.Values{"access_token": {"x"}}}, "access_token"},
 	}
 	for name, tc := range cases {
 		_, err := tc.c.Do(context.Background(), tc.r)
@@ -100,7 +100,7 @@ func TestGuardRefusals(t *testing.T) {
 func TestReadOnlyAllowsValidateOnly(t *testing.T) {
 	c, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{}`)) })
 	c.ReadOnly = true
-	_, err := c.Do(context.Background(), Request{Method: "POST", Path: "v25/customers/1/campaigns:mutate",
+	_, err := c.Do(context.Background(), Request{Method: "POST", Path: "v26/customers/1/campaigns:mutate",
 		Body: []byte(`{}`), Risk: manifest.RiskSpend, ValidateOnly: true})
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +186,7 @@ func TestReadRetriesServerErrorsEvenAsPOST(t *testing.T) {
 func TestMutationIsNeverReplayed(t *testing.T) {
 	var n int32
 	c, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) { atomic.AddInt32(&n, 1); w.WriteHeader(503) })
-	_, err := c.Do(context.Background(), Request{Method: "POST", Path: "v25/customers/1/campaigns:mutate", Body: []byte(`{}`), Risk: manifest.RiskWrite})
+	_, err := c.Do(context.Background(), Request{Method: "POST", Path: "v26/customers/1/campaigns:mutate", Body: []byte(`{}`), Risk: manifest.RiskWrite})
 	if e := asErr(t, err); e.Kind != KindServer || atomic.LoadInt32(&n) != 1 {
 		t.Fatalf("%+v after %d attempts", e, n)
 	}
@@ -199,7 +199,7 @@ func TestDroppedConnection(t *testing.T) {
 		conn, _, _ := w.(http.Hijacker).Hijack()
 		conn.Close()
 	})
-	_, err := c.Do(context.Background(), Request{Method: "POST", Path: "v25/customers/1/campaigns:mutate", Body: []byte(`{}`), Risk: manifest.RiskWrite})
+	_, err := c.Do(context.Background(), Request{Method: "POST", Path: "v26/customers/1/campaigns:mutate", Body: []byte(`{}`), Risk: manifest.RiskWrite})
 	if e := asErr(t, err); e.Kind != KindOutcomeUnknown {
 		t.Fatalf("write: %+v", e)
 	}
@@ -241,7 +241,7 @@ func TestCancelledDuringRetryWaitStops(t *testing.T) {
 		status int
 		r      Request
 	}{
-		"mutation on 429": {429, Request{Method: "POST", Path: "v25/customers/1/campaigns:mutate", Body: []byte(`{}`), Risk: manifest.RiskWrite}},
+		"mutation on 429": {429, Request{Method: "POST", Path: "v26/customers/1/campaigns:mutate", Body: []byte(`{}`), Risk: manifest.RiskWrite}},
 		"read on 503":     {503, search},
 	}
 	for name, tc := range cases {
@@ -277,7 +277,7 @@ func TestDoRefusesMethodOverrideHeaders(t *testing.T) {
 		"X-HTTP-Method-Override", "x-http-method-override", "X_HTTP_METHOD_OVERRIDE",
 		"X-HTTP-Method", "x_http_method", "X-Method-Override", "x_method-override",
 	} {
-		r := Request{Method: "GET", Path: "v25/customers:listAccessibleCustomers", Risk: manifest.RiskRead,
+		r := Request{Method: "GET", Path: "v26/customers:listAccessibleCustomers", Risk: manifest.RiskRead,
 			Headers: http.Header{h: {"POST"}}}
 		_, err := c.Do(context.Background(), r)
 		if e := asErr(t, err); e.Kind != KindUsage || !strings.Contains(e.Message, "method-override") {
@@ -292,7 +292,7 @@ func TestDoRefusesMethodOverrideHeaders(t *testing.T) {
 func TestDoRefusesBodyOnGetAndDelete(t *testing.T) {
 	c, hits := countingClient(t)
 	for _, method := range []string{"GET", "DELETE", "get"} {
-		r := Request{Method: method, Path: "v25/customers/1234567890/campaignBudgets:mutate", Risk: manifest.RiskRead,
+		r := Request{Method: method, Path: "v26/customers/1234567890/campaignBudgets:mutate", Risk: manifest.RiskRead,
 			Body: []byte(`{"operations":[{"create":{"amountMicros":"999999999999"}}]}`)}
 		_, err := c.Do(context.Background(), r)
 		if e := asErr(t, err); e.Kind != KindUsage || !strings.Contains(e.Message, "body") {
@@ -307,7 +307,7 @@ func TestDoRefusesBodyOnGetAndDelete(t *testing.T) {
 func TestDoRefusesUnclassifiedNonGET(t *testing.T) {
 	c, hits := countingClient(t)
 	for _, method := range []string{"POST", "PUT", "PATCH", "DELETE"} {
-		r := Request{Method: method, Path: "v25/customers/1234567890/campaignBudgets:mutate"}
+		r := Request{Method: method, Path: "v26/customers/1234567890/campaignBudgets:mutate"}
 		if method != "DELETE" {
 			r.Body = []byte(`{"operations":[{"create":{"amountMicros":"999999999999"}}]}`)
 		}
@@ -320,7 +320,7 @@ func TestDoRefusesUnclassifiedNonGET(t *testing.T) {
 		t.Fatalf("%d requests reached the server", n)
 	}
 	// A GET needs no class: it cannot carry a body, so it cannot change anything.
-	if _, err := c.Do(context.Background(), Request{Method: "GET", Path: "v25/customers:listAccessibleCustomers"}); err != nil {
+	if _, err := c.Do(context.Background(), Request{Method: "GET", Path: "v26/customers:listAccessibleCustomers"}); err != nil {
 		t.Fatal(err)
 	}
 }
